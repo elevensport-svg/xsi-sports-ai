@@ -1,3 +1,8 @@
+import { getTeamBattingStats } from "../../../lib/api/batting";
+import { calculateBattingScore } from "../../../lib/xsi/batting";
+import { getTeamRecentForm } from "../../../lib/api/teamForm";
+import { calculateFormScore } from "../../../lib/xsi/recent";
+import { calculateXsiEngine } from "../../../lib/xsi/engine";
 import { getPitcherSeasonStats } from "../../../lib/api/pitcher";
 import {
   formatTaiwanGameTime,
@@ -117,7 +122,42 @@ export default async function GamePage({ params }: PageProps) {
 
   const awayPitcherScore = calculatePitcherScore(awayPitcherStats);
   const homePitcherScore = calculatePitcherScore(homePitcherStats);
+const [awayFormStats, homeFormStats] = await Promise.all([
+  getTeamRecentForm(awayTeamId),
+  getTeamRecentForm(homeTeamId),
+]);
 
+const awayFormScore = calculateFormScore(awayFormStats);
+const homeFormScore = calculateFormScore(homeFormStats);
+const [awayBattingStats, homeBattingStats] = await Promise.all([
+  getTeamBattingStats(awayTeamId),
+  getTeamBattingStats(homeTeamId),
+]);
+
+const awayBattingScore = calculateBattingScore(awayBattingStats);
+const homeBattingScore = calculateBattingScore(homeBattingStats);
+  const awayXsi = calculateXsiEngine({
+  pitch: awayPitcherScore.score,
+bat: awayBattingScore.score,
+bullpen: 50,
+form: awayFormScore.score,
+market: 50,
+});
+
+const homeXsi = calculateXsiEngine({
+  pitch: homePitcherScore.score,
+bat: homeBattingScore.score,
+bullpen: 50,
+form: homeFormScore.score,
+market: 50,
+});
+
+const overallLeader =
+  awayXsi.total === homeXsi.total
+    ? "目前雙方綜合評分相同"
+    : awayXsi.total > homeXsi.total
+      ? `${awayTeamName}暫時領先`
+      : `${homeTeamName}暫時領先`;
   const pitcherLeader =
     awayPitcherScore.score === homePitcherScore.score
       ? "雙方投手評分相同"
@@ -272,42 +312,114 @@ export default async function GamePage({ params }: PageProps) {
               </div>
             </div>
           </div>
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
+  <div className="rounded-xl bg-zinc-800 p-5">
+    <p className="text-sm text-zinc-400">
+      {awayTeamName} 打線評分
+    </p>
 
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            <div className="rounded-xl bg-zinc-800 p-5">
-              <p className="text-sm text-zinc-400">
-                XSI Pitch 投手比較
-              </p>
+    <p className="mt-3 text-3xl font-bold text-yellow-400">
+      XSI Bat {awayBattingScore.score}
+    </p>
 
-              <p className="mt-2 text-3xl font-bold text-yellow-400">
-                {awayPitcherScore.score}：{homePitcherScore.score}
-              </p>
+    <p className="mt-2 text-sm text-zinc-500">
+      等級：{awayBattingScore.grade}
+    </p>
 
-              <p className="mt-2 text-sm text-zinc-500">{pitcherLeader}</p>
-            </div>
+    <p className="mt-2 text-sm text-zinc-500">
+      AVG：{awayBattingStats?.avg ?? "-"}
+    </p>
 
-            <div className="rounded-xl bg-zinc-800 p-5">
-              <p className="text-sm text-zinc-400">推薦方向</p>
+    <p className="mt-2 text-sm text-zinc-500">
+      OPS：{awayBattingStats?.ops ?? "-"}
+    </p>
 
-              <p className="mt-2 text-xl font-bold">
-                {scoreDifference >= 8 ? pitcherLeader : "投手優勢不明顯"}
-              </p>
+    <p className="mt-2 text-sm text-zinc-500">
+      全壘打：{awayBattingStats?.homeRuns ?? "-"}
+    </p>
 
-              <p className="mt-2 text-sm text-zinc-500">
-                目前只依先發投手模組判斷
-              </p>
-            </div>
+    <p className="mt-2 text-sm text-zinc-500">
+      得分：{awayBattingStats?.runs ?? "-"}
+    </p>
+  </div>
 
-            <div className="rounded-xl bg-zinc-800 p-5">
-              <p className="text-sm text-zinc-400">風險等級</p>
+  <div className="rounded-xl bg-zinc-800 p-5">
+    <p className="text-sm text-zinc-400">
+      {homeTeamName} 打線評分
+    </p>
 
-              <p className="mt-2 text-2xl font-bold">{riskLevel}</p>
+    <p className="mt-3 text-3xl font-bold text-yellow-400">
+      XSI Bat {homeBattingScore.score}
+    </p>
 
-              <p className="mt-2 text-sm text-zinc-500">
-                投手評分差距：{scoreDifference} 分
-              </p>
-            </div>
-          </div>
+    <p className="mt-2 text-sm text-zinc-500">
+      等級：{homeBattingScore.grade}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      AVG：{homeBattingStats?.avg ?? "-"}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      OPS：{homeBattingStats?.ops ?? "-"}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      全壘打：{homeBattingStats?.homeRuns ?? "-"}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      得分：{homeBattingStats?.runs ?? "-"}
+    </p>
+  </div>
+</div>
+<div className="mt-10 grid gap-5 md:grid-cols-2">
+  <div className="rounded-xl bg-zinc-800 p-5">
+    <p className="text-sm text-zinc-400">
+      {awayTeamName} 近期狀態
+    </p>
+
+    <p className="mt-3 text-3xl font-bold text-yellow-400">
+      XSI Form {awayFormScore.score}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      近10場：{awayFormStats?.wins ?? 0}勝
+      {awayFormStats?.losses ?? 0}敗
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      目前趨勢：{awayFormStats?.streak ?? "-"}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      得失分差：{awayFormStats?.runDifference ?? 0}
+    </p>
+  </div>
+
+  <div className="rounded-xl bg-zinc-800 p-5">
+    <p className="text-sm text-zinc-400">
+      {homeTeamName} 近期狀態
+    </p>
+
+    <p className="mt-3 text-3xl font-bold text-yellow-400">
+      XSI Form {homeFormScore.score}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      近10場：{homeFormStats?.wins ?? 0}勝
+      {homeFormStats?.losses ?? 0}敗
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      目前趨勢：{homeFormStats?.streak ?? "-"}
+    </p>
+
+    <p className="mt-2 text-sm text-zinc-500">
+      得失分差：{homeFormStats?.runDifference ?? 0}
+    </p>
+  </div>
+</div>
         </section>
       </div>
     </main>
