@@ -18,9 +18,9 @@ export default async function Home() {
   const membership = await getCurrentUserMembership();
 
   // 尚未登入 → 直接前往登入頁
-  if (!membership.user) {
-    redirect("/login");
-  }
+  if (!membership.isLoggedIn) {
+  redirect("/login");
+}
 
   return (
     <main className="min-h-screen bg-black text-white">
