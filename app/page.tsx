@@ -17,38 +17,56 @@ const menuItems = [
 export default async function Home() {
   const membership = await getCurrentUserMembership();
 
-  // 尚未登入 → 直接前往登入頁
   if (!membership.isLoggedIn) {
-  redirect("/login");
-}
+    redirect("/login");
+  }
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen overflow-x-hidden bg-black text-white">
+      {/* Header */}
       <header className="border-b border-yellow-500/20 bg-black">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-2xl font-black text-yellow-400">
+        <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-black text-yellow-400 sm:text-2xl">
               十一體育分析 AI
             </h1>
 
-            <p className="text-sm text-zinc-400">
+            <p className="mt-1 hidden text-sm text-zinc-400 sm:block">
               運動數據智慧平台
             </p>
           </div>
 
-          <div className="rounded-lg border border-yellow-500/30 bg-zinc-900 px-4 py-2">
-            {membership.isVip ? "VIP 會員" : "Free 會員"}
+          <div className="shrink-0 rounded-lg border border-yellow-500/30 bg-zinc-900 px-3 py-2 text-xs font-bold sm:px-4 sm:text-sm">
+            {membership.isVip
+              ? "VIP 會員"
+              : membership.name}
           </div>
         </div>
+
+        {/* 手機版選單 */}
+        <nav className="border-t border-zinc-900 px-3 py-3 md:hidden">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {menuItems.map((item) => (
+              <button
+                key={item.label}
+                className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-zinc-300 transition hover:border-yellow-400 hover:bg-yellow-400 hover:text-black"
+              >
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </nav>
       </header>
 
-      <div className="flex">
-        <aside className="min-h-[calc(100vh-73px)] w-64 border-r border-yellow-500/20 bg-zinc-950 p-4">
+      <div className="flex min-w-0">
+        {/* 桌機版 Sidebar */}
+        <aside className="hidden min-h-[calc(100vh-73px)] w-64 shrink-0 border-r border-yellow-500/20 bg-zinc-950 p-4 md:block">
           <nav className="space-y-2">
             {menuItems.map((item) => (
               <button
                 key={item.label}
-                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left hover:bg-yellow-400 hover:text-black"
+                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left transition hover:bg-yellow-400 hover:text-black"
               >
                 <span>{item.icon}</span>
                 <span>{item.label}</span>
@@ -57,16 +75,19 @@ export default async function Home() {
           </nav>
         </aside>
 
-        <section className="flex-1 p-8">
-          <h2 className="text-4xl font-bold">
-            MLB 明日賽事
-          </h2>
+        {/* Main Content */}
+        <section className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:p-8">
+          <div className="mx-auto w-full max-w-[1500px]">
+            <h2 className="text-3xl font-black leading-tight sm:text-4xl">
+              MLB 明日賽事
+            </h2>
 
-          <p className="mt-3 text-zinc-400">
-            以下時間皆為台灣時間
-          </p>
+            <p className="mt-2 text-sm text-zinc-400 sm:mt-3">
+              以下時間皆為台灣時間
+            </p>
 
-          <MlbTomorrowGames />
+            <MlbTomorrowGames />
+          </div>
         </section>
       </div>
     </main>
