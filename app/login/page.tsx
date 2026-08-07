@@ -34,6 +34,8 @@ export default function LoginPage() {
     }
 
     setMessage("登入成功");
+    router.push("/");
+router.refresh();
 
     router.push("/");
     router.refresh();
