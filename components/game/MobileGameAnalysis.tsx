@@ -69,9 +69,9 @@ export default function MobileGameAnalysis({
         {/* Header */}
         <section className="rounded-2xl border border-yellow-500/20 bg-zinc-900 p-4">
 
-          <p className="text-xs font-black tracking-widest text-yellow-400">
-            MLB GAME ANALYSIS
-          </p>
+          <p className="text-xs font-black tracking-widest text-red-500">
+  MOBILE TEST
+</p>
 
 
           <h1 className="mt-3 break-words text-xl font-black leading-tight">
