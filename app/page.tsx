@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
+
 import MlbTomorrowGames from "../components/MlbTomorrowGames";
+import { getCurrentUserMembership } from "../lib/membership";
 
 const menuItems = [
   { icon: "🏠", label: "首頁" },
@@ -11,13 +14,20 @@ const menuItems = [
   { icon: "⚙️", label: "設定" },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const membership = await getCurrentUserMembership();
+
+  // 尚未登入 → 直接前往登入頁
+  if (!membership.user) {
+    redirect("/login");
+  }
+
   return (
-    <main className="min-h-screen bg-[#0b0b0b] text-white">
+    <main className="min-h-screen bg-black text-white">
       <header className="border-b border-yellow-500/20 bg-black">
         <div className="flex items-center justify-between px-6 py-4">
           <div>
-            <h1 className="text-2xl font-bold text-yellow-400">
+            <h1 className="text-2xl font-black text-yellow-400">
               十一體育分析 AI
             </h1>
 
@@ -27,7 +37,7 @@ export default function Home() {
           </div>
 
           <div className="rounded-lg border border-yellow-500/30 bg-zinc-900 px-4 py-2">
-            管理員
+            {membership.isVip ? "VIP 會員" : "Free 會員"}
           </div>
         </div>
       </header>
