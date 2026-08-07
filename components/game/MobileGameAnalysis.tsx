@@ -36,13 +36,12 @@ export default function MobileGameAnalysis({
 
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-3 pt-12 pb-32 text-white">
+    <main className="min-h-screen bg-zinc-950 px-3 pt-10 pb-32 text-white">
 
-      <div className="mx-auto w-full max-w-xl">
+      <div className="w-full">
 
 
-        {/* 標題區 */}
-        <section className="rounded-2xl border border-yellow-500/20 bg-zinc-900 p-5">
+        <section className="rounded-2xl border border-yellow-500/20 bg-zinc-900 p-4">
 
 
           <p className="text-xs font-black tracking-widest text-yellow-400">
@@ -50,7 +49,7 @@ export default function MobileGameAnalysis({
           </p>
 
 
-          <h1 className="mt-3 text-2xl font-black leading-snug break-words">
+          <h1 className="mt-3 text-2xl font-black leading-tight">
             {awayTeamName}
 
             <span className="mx-2 text-yellow-400">
@@ -67,32 +66,37 @@ export default function MobileGameAnalysis({
           </p>
 
 
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="text-xs text-zinc-500">
             Game ID：{game.gamePk}
           </p>
 
 
 
-          {/* 左右球隊 */}
-          <div className="mt-8 grid grid-cols-2 gap-2">
+          {/* 固定左右兩隊 */}
+          <div className="mt-8 flex w-full gap-2">
 
 
-            <TeamBox
-              side="AWAY"
-              teamId={awayTeamId}
-              teamName={awayTeamName}
-              pitcher={awayPitcher}
-              score={awayPitcherScore}
-            />
+            <div className="w-1/2">
+              <TeamBox
+                side="AWAY"
+                teamId={awayTeamId}
+                teamName={awayTeamName}
+                pitcher={awayPitcher}
+                score={awayPitcherScore}
+              />
+            </div>
 
 
-            <TeamBox
-              side="HOME"
-              teamId={homeTeamId}
-              teamName={homeTeamName}
-              pitcher={homePitcher}
-              score={homePitcherScore}
-            />
+
+            <div className="w-1/2">
+              <TeamBox
+                side="HOME"
+                teamId={homeTeamId}
+                teamName={homeTeamName}
+                pitcher={homePitcher}
+                score={homePitcherScore}
+              />
+            </div>
 
 
           </div>
@@ -102,19 +106,17 @@ export default function MobileGameAnalysis({
 
 
 
-        {/* 勝率 */}
-        <section className="mt-5 rounded-2xl border border-yellow-500/20 bg-zinc-900 p-5">
-
+        <section className="mt-5 rounded-2xl border border-yellow-500/20 bg-zinc-900 p-4">
 
           <p className="text-xs font-bold text-yellow-400">
             XSI WIN PROBABILITY
           </p>
 
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-3 flex gap-2">
 
 
-            <div className="rounded-xl bg-zinc-950 p-3 text-center">
+            <div className="w-1/2 rounded-xl bg-black p-3 text-center">
 
               <p className="truncate text-xs text-zinc-400">
                 {awayTeamName}
@@ -128,7 +130,7 @@ export default function MobileGameAnalysis({
 
 
 
-            <div className="rounded-xl bg-zinc-950 p-3 text-center">
+            <div className="w-1/2 rounded-xl bg-black p-3 text-center">
 
               <p className="truncate text-xs text-zinc-400">
                 {homeTeamName}
@@ -143,26 +145,22 @@ export default function MobileGameAnalysis({
 
           </div>
 
-
         </section>
 
 
 
-        {/* AI */}
-        <section className="mt-5 rounded-2xl border border-yellow-500/20 bg-zinc-900 p-5">
-
+        <section className="mt-5 rounded-2xl border border-yellow-500/20 bg-zinc-900 p-4">
 
           <p className="text-xs text-zinc-500">
             XSI VALUE SCORE
           </p>
-
 
           <p className="mt-2 text-5xl font-black text-yellow-400">
             {valueScore.score}
           </p>
 
 
-          <p className="mt-3 text-lg font-bold">
+          <p className="mt-3 font-bold">
             {betAdvisor.recommendation}
           </p>
 
@@ -187,36 +185,39 @@ function TeamBox({
   score,
 }: any) {
 
+
   return (
 
-    <div className="rounded-2xl bg-zinc-800 p-3 text-center">
+    <div className="min-w-0 rounded-2xl bg-zinc-800 p-2 text-center">
 
 
-      <p className="text-[11px] text-zinc-400">
+      <p className="text-[10px] text-zinc-400">
         {side}
       </p>
+
 
 
       <img
         src={getMlbTeamLogo(teamId)}
         alt={teamName}
-        className="mx-auto mt-3 h-16 w-16 object-contain"
+        className="mx-auto mt-3 h-14 w-14 object-contain"
       />
 
 
 
-      <h2 className="mt-3 truncate text-xs font-black">
+      <h2 className="mt-2 truncate text-xs font-black">
         {teamName}
       </h2>
 
 
 
-      <div className="mt-4 rounded-xl bg-zinc-950 p-3">
+      <div className="mt-3 rounded-xl bg-zinc-950 p-2">
 
 
-        <p className="text-[10px] text-zinc-500">
+        <p className="text-[9px] text-zinc-500">
           STARTING PITCHER
         </p>
+
 
 
         <p className="mt-2 truncate text-xs font-bold">
@@ -228,27 +229,23 @@ function TeamBox({
         <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-400/5 p-2">
 
 
-          <p className="text-left text-[10px] font-bold text-yellow-400">
+          <p className="text-left text-[9px] font-bold text-yellow-400">
             XSI PITCH
           </p>
 
 
-          <p className="mt-1 text-3xl font-black text-yellow-400">
+          <p className="text-3xl font-black text-yellow-400">
             {score.score}
           </p>
 
 
-          <p className="text-left text-[10px] text-zinc-400">
-            {score.grade}
-          </p>
 
-
-          <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
+          <div className="mt-2 h-1 rounded-full bg-zinc-800">
 
             <div
               className="h-full rounded-full bg-yellow-400"
               style={{
-                width:`${score.score}%`,
+                width: `${score.score}%`,
               }}
             />
 
