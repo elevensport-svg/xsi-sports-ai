@@ -3,7 +3,7 @@ import {
   calculateBetAdvisor,
 } from "../../../lib/xsi/betAdvisor";
 
-import { currentUser } from "../../../lib/membership";
+import { getCurrentUserMembership } from "../../../lib/membership";
 
 import ValueScoreCard from "../../../components/cards/ValueScoreCard";
 
@@ -179,6 +179,8 @@ function PitcherScoreCard({
 export default async function GamePage({
   params,
 }: PageProps) {
+
+  const membership = await getCurrentUserMembership();
 
   const {
     gamePk,
@@ -750,7 +752,7 @@ export default async function GamePage({
               homeTeamName={homeTeamName}
               awayProbability={winProbability.awayWinProbability}
               homeProbability={winProbability.homeWinProbability}
-              isVip={currentUser.level === "vip"}
+              isVip={membership.isVip}
             />
 
 
@@ -758,7 +760,7 @@ export default async function GamePage({
             <ValueScoreCard
               score={valueScore.score}
               grade={valueScore.grade}
-              isVip={currentUser.level === "vip"}
+              isVip={membership.isVip}
               details={[
                 {
                   label:"Pitch",
@@ -797,7 +799,7 @@ export default async function GamePage({
 
             <div className="min-w-0 max-w-full overflow-hidden">
               <BetAdvisorCard
-              isVip={currentUser.level === "vip"}
+              isVip={membership.isVip}
               recommendation={betAdvisor.recommendation}
               confidence={betAdvisor.confidence}
               score={betAdvisor.score}
@@ -809,7 +811,7 @@ export default async function GamePage({
 
             <div className="min-w-0 max-w-full overflow-hidden">
               <AIRecommendationCard
-  isVip={currentUser.level === "vip"}
+  isVip={membership.isVip}
               awayTeamName={awayTeamName}
               homeTeamName={homeTeamName}
               awayXsi={awayXsi}
