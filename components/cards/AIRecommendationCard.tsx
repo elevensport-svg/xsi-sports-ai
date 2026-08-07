@@ -1,0 +1,353 @@
+type TeamXsi = {
+  total: number;
+  confidence: number;
+  recommendation: string;
+  risk: string;
+};
+
+type Props = {
+  isVip: boolean;
+
+  awayTeamName: string;
+  homeTeamName: string;
+
+  awayXsi: TeamXsi;
+  homeXsi: TeamXsi;
+
+  awayPitchScore: number;
+  homePitchScore: number;
+
+  awayBatScore: number;
+  homeBatScore: number;
+
+  awayBullpenScore: number;
+  homeBullpenScore: number;
+
+  awayFormScore: number;
+  homeFormScore: number;
+
+  awayMarketScore: number;
+  homeMarketScore: number;
+};
+
+function getStars(confidence: number): string {
+  if (confidence >= 85) return "★★★★★";
+  if (confidence >= 75) return "★★★★☆";
+  if (confidence >= 65) return "★★★☆☆";
+  if (confidence >= 55) return "★★☆☆☆";
+
+  return "★☆☆☆☆";
+}
+
+function getBetLevel(confidence: number): string {
+  if (confidence >= 85) return "強力推薦";
+  if (confidence >= 75) return "可以考慮";
+  if (confidence >= 65) return "小注方向";
+  if (confidence >= 55) return "保守觀望";
+
+  return "PASS";
+}
+
+function getAdvantageText(
+  label: string,
+  awayScore: number,
+  homeScore: number,
+  awayTeamName: string,
+  homeTeamName: string,
+): string {
+  const difference = Math.abs(awayScore - homeScore);
+
+  if (difference < 3) {
+    return `${label}：雙方差距不明顯`;
+  }
+
+  const leadingTeam =
+    awayScore > homeScore ? awayTeamName : homeTeamName;
+
+  return `${label}：${leadingTeam}領先 ${difference.toFixed(1)} 分`;
+}
+
+export default function AIRecommendationCard({
+  isVip,
+  awayTeamName,
+  homeTeamName,
+  awayXsi,
+  homeXsi,
+  awayPitchScore,
+  homePitchScore,
+  awayBatScore,
+  homeBatScore,
+  awayBullpenScore,
+  homeBullpenScore,
+  awayFormScore,
+  homeFormScore,
+  awayMarketScore,
+  homeMarketScore,
+}: Props) {
+  const isTie = awayXsi.total === homeXsi.total;
+
+  const selectedTeam =
+    awayXsi.total > homeXsi.total
+      ? awayTeamName
+      : homeTeamName;
+
+  const selectedXsi =
+    awayXsi.total >= homeXsi.total
+      ? awayXsi
+      : homeXsi;
+
+  const scoreDifference = Math.abs(
+    awayXsi.total - homeXsi.total,
+  );
+
+  const confidence = selectedXsi.confidence;
+
+  const stars = getStars(confidence);
+
+  const betLevel = getBetLevel(confidence);
+
+  const finalRecommendation =
+    isTie || confidence < 55
+      ? "PASS，本場暫無明顯投注價值"
+      : `${selectedTeam}｜${selectedXsi.recommendation}`;
+
+  const reasons = [
+    getAdvantageText(
+      "先發投手",
+      awayPitchScore,
+      homePitchScore,
+      awayTeamName,
+      homeTeamName,
+    ),
+
+    getAdvantageText(
+      "球隊打線",
+      awayBatScore,
+      homeBatScore,
+      awayTeamName,
+      homeTeamName,
+    ),
+
+    getAdvantageText(
+      "牛棚表現",
+      awayBullpenScore,
+      homeBullpenScore,
+      awayTeamName,
+      homeTeamName,
+    ),
+
+    getAdvantageText(
+      "近期狀態",
+      awayFormScore,
+      homeFormScore,
+      awayTeamName,
+      homeTeamName,
+    ),
+
+    getAdvantageText(
+      "市場盤口",
+      awayMarketScore,
+      homeMarketScore,
+      awayTeamName,
+      homeTeamName,
+    ),
+  ];
+
+  /*
+  |--------------------------------------------------------------------------
+  | FREE USER
+  |--------------------------------------------------------------------------
+  */
+
+  if (!isVip) {
+    return (
+      <section className="mt-10 overflow-hidden rounded-3xl border border-yellow-500/30 bg-gradient-to-br from-yellow-400/10 via-zinc-950 to-black">
+        <div className="p-6 md:p-8">
+
+          <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
+            XSI AI RECOMMENDATION
+          </p>
+
+          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 md:p-8">
+
+            <div className="text-center">
+
+              <div className="text-4xl">
+                🔒
+              </div>
+
+              <h2 className="mt-4 text-2xl font-black text-white md:text-3xl">
+                XSI VIP AI ANALYSIS
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-zinc-400">
+                升級 VIP 查看完整 AI 推演、球隊優勢、XSI 差距與市場分析
+              </p>
+
+            </div>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center">
+                <p className="text-sm font-bold text-zinc-300">
+                  🔒 AI 最終推薦
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center">
+                <p className="text-sm font-bold text-zinc-300">
+                  🔒 投手分析
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center">
+                <p className="text-sm font-bold text-zinc-300">
+                  🔒 打線分析
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center">
+                <p className="text-sm font-bold text-zinc-300">
+                  🔒 牛棚分析
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center">
+                <p className="text-sm font-bold text-zinc-300">
+                  🔒 市場盤口
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center">
+                <p className="text-sm font-bold text-zinc-300">
+                  🔒 AI 風險評估
+                </p>
+              </div>
+
+            </div>
+
+            <button
+              type="button"
+              className="mt-8 w-full rounded-xl bg-yellow-400 px-6 py-4 text-base font-black text-black transition hover:bg-yellow-300"
+            >
+              🔒 升級 VIP 查看完整 AI 分析
+            </button>
+
+          </div>
+
+        </div>
+      </section>
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | VIP USER
+  |--------------------------------------------------------------------------
+  */
+
+  return (
+    <section className="mt-10 overflow-hidden rounded-3xl border border-yellow-500/30 bg-gradient-to-br from-yellow-400/10 via-zinc-950 to-black">
+
+      <div className="p-6 md:p-8">
+
+        <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
+          XSI AI RECOMMENDATION
+        </p>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+
+          <div className="rounded-2xl border border-yellow-500/20 bg-black/30 p-6">
+
+            <p className="text-sm text-zinc-500">
+              AI 最終建議
+            </p>
+
+            <h2 className="mt-3 text-3xl font-black text-white md:text-4xl">
+              {finalRecommendation}
+            </h2>
+
+            <p className="mt-4 text-3xl tracking-widest text-yellow-400">
+              {stars}
+            </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+
+              <span className="rounded-full bg-yellow-400 px-4 py-2 text-sm font-black text-black">
+                信心 {confidence}%
+              </span>
+
+              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-bold text-zinc-300">
+                {betLevel}
+              </span>
+
+              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-bold text-zinc-300">
+                風險：{selectedXsi.risk}
+              </span>
+
+            </div>
+
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+
+            <div className="rounded-2xl bg-zinc-900 p-5">
+
+              <p className="text-xs text-zinc-500">
+                領先球隊
+              </p>
+
+              <p className="mt-2 text-2xl font-black text-yellow-400">
+                {isTie ? "雙方相同" : selectedTeam}
+              </p>
+
+            </div>
+
+            <div className="rounded-2xl bg-zinc-900 p-5">
+
+              <p className="text-xs text-zinc-500">
+                XSI 綜合差距
+              </p>
+
+              <p className="mt-2 text-3xl font-black text-white">
+                {scoreDifference.toFixed(1)}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        <div className="mt-6 rounded-2xl bg-zinc-900 p-6">
+
+          <p className="font-black text-yellow-400">
+            AI 判斷依據
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+
+            {reasons.map((reason) => (
+              <div
+                key={reason}
+                className="rounded-xl border border-zinc-800 bg-zinc-950 p-4"
+              >
+                <p className="text-sm text-zinc-300">
+                  ✓ {reason}
+                </p>
+              </div>
+            ))}
+
+          </div>
+
+        </div>
+
+        <p className="mt-5 text-xs leading-6 text-zinc-600">
+          此結果依先發投手、打線、牛棚、近期狀態及市場盤口模型計算，僅供賽事研究參考。
+        </p>
+
+      </div>
+
+    </section>
+  );
+}
