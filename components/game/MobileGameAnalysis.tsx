@@ -215,7 +215,7 @@ function TeamBox({
 
 
         <p className="text-[9px] text-zinc-500">
-          STARTING PITCHER
+          先發投手
         </p>
 
 

@@ -250,7 +250,7 @@ function TeamBox({
       <div className="mt-6 rounded-xl bg-zinc-900 p-5">
 
         <p className="text-sm text-zinc-400">
-          STARTING PITCHER
+          先發投手
         </p>
 
 
