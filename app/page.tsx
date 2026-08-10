@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import MlbTomorrowGames from "../components/MlbTomorrowGames";
@@ -47,14 +48,19 @@ export default async function Home() {
         <nav className="border-t border-zinc-900 px-3 py-3 md:hidden">
           <div className="flex gap-2 overflow-x-auto pb-1">
             {menuItems.map((item) => (
-              <button
-                key={item.label}
-                className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-zinc-300 transition hover:border-yellow-400 hover:bg-yellow-400 hover:text-black"
-              >
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
+  <Link
+    key={item.label}
+    href={
+      item.label === "歷史戰績"
+        ? "/history"
+        : "/"
+    }
+    className="flex w-full items-center gap-3 rounded-lg px-4 py-3 hover:bg-yellow-400 hover:text-black"
+  >
+    <span>{item.icon}</span>
+    <span>{item.label}</span>
+  </Link>
+))}
           </div>
         </nav>
       </header>
@@ -64,14 +70,19 @@ export default async function Home() {
         <aside className="hidden min-h-[calc(100vh-73px)] w-64 shrink-0 border-r border-yellow-500/20 bg-zinc-950 p-4 md:block">
           <nav className="space-y-2">
             {menuItems.map((item) => (
-              <button
-                key={item.label}
-                className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left transition hover:bg-yellow-400 hover:text-black"
-              >
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
+  <Link
+    key={item.label}
+    href={
+      item.label === "歷史戰績"
+        ? "/history"
+        : "/"
+    }
+    className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left hover:bg-yellow-400 hover:text-black"
+  >
+    <span>{item.icon}</span>
+    <span>{item.label}</span>
+  </Link>
+))}
           </nav>
         </aside>
 
