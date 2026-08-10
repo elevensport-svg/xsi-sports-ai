@@ -92,12 +92,14 @@ export default function ValueScoreCard({
             ))}
           </div>
 
-          <button
-            type="button"
-            className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-black text-black transition hover:bg-yellow-300"
-          >
-            升級 VIP 查看完整分析
-          </button>
+          <a
+  href="https://lin.ee/r8t6pBB4"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="mt-6 inline-flex items-center justify-center rounded-full bg-yellow-400 px-6 py-3 font-black text-black transition hover:bg-yellow-300"
+>
+  升級 VIP 查看完整分析
+</a>
         </div>
       ) : (
         <div className="mt-8">

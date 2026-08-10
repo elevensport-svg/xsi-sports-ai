@@ -60,12 +60,14 @@ export default async function CorrectScorePage() {
                   波膽組合、比分機率與風險評級。
                 </p>
 
-                <Link
-                  href="/pricing"
-                  className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-yellow-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-yellow-300"
-                >
-                  升級 VIP 解鎖
-                </Link>
+                <a
+  href="https://lin.ee/r8t6pBB4"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-yellow-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-yellow-300"
+>
+  升級 VIP 解鎖
+</a>
 
                 <Link
                   href="/"

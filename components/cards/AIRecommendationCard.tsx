@@ -226,12 +226,14 @@ export default function AIRecommendationCard({
 
             </div>
 
-            <button
-              type="button"
-              className="mt-8 w-full rounded-xl bg-yellow-400 px-6 py-4 text-base font-black text-black transition hover:bg-yellow-300"
-            >
-              🔒 升級 VIP 查看完整 AI 分析
-            </button>
+            <a
+  href="https://lin.ee/r8t6pBB4"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="mt-8 block w-full rounded-xl bg-yellow-400 px-6 py-4 text-center text-base font-black text-black transition hover:bg-yellow-300"
+>
+  🔒 升級 VIP 查看完整 AI 分析
+</a>
 
           </div>
 

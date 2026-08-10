@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUserMembership } from "../../../lib/membership";
 
+const LINE_URL = "https://lin.ee/r8t6pBB4";
+
 export default async function ParlayPage() {
   const membership =
     await getCurrentUserMembership();
@@ -60,12 +62,14 @@ export default async function ParlayPage() {
                   串關組合、信心度與風險評級。
                 </p>
 
-                <Link
-                  href="/pricing"
+                <a
+                  href={LINE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-yellow-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-yellow-300"
                 >
                   升級 VIP 解鎖
-                </Link>
+                </a>
 
                 <Link
                   href="/"
@@ -165,7 +169,7 @@ function ParlayCard({
 }) {
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="font-black text-white">
           {level}
         </p>
