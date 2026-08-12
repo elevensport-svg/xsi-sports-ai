@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sports-sync",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/football-settlement",
+      "schedule": "0 * * * *"
     }
   ]
 }

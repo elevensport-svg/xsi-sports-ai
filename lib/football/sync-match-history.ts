@@ -1,17 +1,6 @@
 import {
-  NextResponse,
-} from "next/server";
-
-import {
   createClient,
 } from "@supabase/supabase-js";
-
-import {
-  settleFootballPredictions,
-} from "../../../../../lib/prediction/settleFootballPredictions";
-
-export const dynamic =
-  "force-dynamic";
 
 const SOURCE =
   "football-data.co.uk";
@@ -102,6 +91,30 @@ type HistoryRow = {
   updated_at: string;
 };
 
+export type FootballHistorySyncLeagueResult = {
+  league: string;
+  code: string;
+  csvRows: number;
+  finishedMatches: number;
+  oddsComplete: number;
+  oddsMissing: number;
+  skipped: number;
+  upserted: number;
+  status:
+    | "ok"
+    | "skipped"
+    | "error";
+  message?: string;
+};
+
+export type FootballHistorySyncResult = {
+  success: true;
+  season: string;
+  totalUpserted: number;
+  leagues:
+    FootballHistorySyncLeagueResult[];
+};
+
 function getCurrentSeason() {
   const now =
     new Date();
@@ -113,13 +126,6 @@ function getCurrentSeason() {
     now.getUTCMonth() +
     1;
 
-  /*
-   * 歐洲足球賽季通常於 7~8 月切換。
-   * 7 月起視為新賽季。
-   *
-   * 2026-08 → 2026/27
-   * 2027-02 → 2026/27
-   */
   const startYear =
     month >=
     7
@@ -782,360 +788,106 @@ async function upsertLeagueRows({
   return upserted;
 }
 
-export async function GET() {
-  try {
-    const season =
-      getCurrentSeason();
+export async function syncFootballMatchHistory(): Promise<FootballHistorySyncResult> {
+  const season =
+    getCurrentSeason();
 
-    const seasonCode =
-      getSeasonCode(
-        season,
-      );
-
-    console.log(
-      "======================================",
+  const seasonCode =
+    getSeasonCode(
+      season,
     );
 
-    console.log(
-      "⚽ FIVE LEAGUES HISTORY SYNC",
+  console.log(
+    "======================================",
+  );
+
+  console.log(
+    "⚽ FIVE LEAGUES HISTORY SYNC",
+  );
+
+  console.log(
+    `📅 Season：${season}`,
+  );
+
+  console.log(
+    "======================================",
+  );
+
+  const supabaseUrl =
+    process.env
+      .NEXT_PUBLIC_SUPABASE_URL;
+
+  const supabaseKey =
+    process.env
+      .SUPABASE_SECRET_KEY ??
+    process.env
+      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  if (
+    !supabaseUrl ||
+    !supabaseKey
+  ) {
+    throw new Error(
+      "找不到 Supabase 環境變數",
     );
+  }
 
-    console.log(
-      `📅 Season：${season}`,
-    );
-
-    console.log(
-      "======================================",
-    );
-
-    const supabaseUrl =
-      process.env
-        .NEXT_PUBLIC_SUPABASE_URL;
-
-    const supabaseKey =
-      process.env
-        .SUPABASE_SECRET_KEY ??
-      process.env
-        .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-    if (
-      !supabaseUrl ||
-      !supabaseKey
-    ) {
-      return NextResponse.json(
-        {
-          success:
+  const supabase =
+    createClient(
+      supabaseUrl,
+      supabaseKey,
+      {
+        auth: {
+          persistSession:
             false,
 
-          message:
-            "找不到 Supabase 環境變數",
+          autoRefreshToken:
+            false,
         },
-        {
-          status:
-            500,
-        },
-      );
-    }
+      },
+    );
 
-    const supabase =
-      createClient(
-        supabaseUrl,
-        supabaseKey,
-        {
-          auth: {
-            persistSession:
-              false,
+  const result:
+    FootballHistorySyncLeagueResult[] =
+    [];
 
-            autoRefreshToken:
-              false,
-          },
-        },
-      );
+  for (
+    const config
+    of LEAGUES
+  ) {
+    console.log(
+      "--------------------------------------",
+    );
 
-    const result:
-      Array<{
-        league: string;
-        code: string;
-        csvRows: number;
-        finishedMatches: number;
-        oddsComplete: number;
-        oddsMissing: number;
-        skipped: number;
-        upserted: number;
-        status:
-          "ok" |
-          "skipped" |
-          "error";
-        message?: string;
-      }> = [];
+    console.log(
+      `🌍 ${config.league} (${config.code})`,
+    );
 
-    for (
-      const config
-      of LEAGUES
-    ) {
-      console.log(
-        "--------------------------------------",
-      );
+    const csvUrl =
+      `https://www.football-data.co.uk/mmz4281/${seasonCode}/${config.code}.csv`;
 
-      console.log(
-        `🌍 ${config.league} (${config.code})`,
-      );
+    console.log(
+      `🌐 Download：${csvUrl}`,
+    );
 
-      const csvUrl =
-        `https://www.football-data.co.uk/mmz4281/${seasonCode}/${config.code}.csv`;
+    try {
+      const response =
+        await fetch(
+          csvUrl,
+          {
+            cache:
+              "no-store",
 
-      console.log(
-        `🌐 Download：${csvUrl}`,
-      );
-
-      try {
-        const response =
-          await fetch(
-            csvUrl,
-            {
-              cache:
-                "no-store",
-
-              headers: {
-                "User-Agent":
-                  "Mozilla/5.0 XSI-Sports-AI",
-              },
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 XSI-Sports-AI",
             },
-          );
-
-        if (
-          !response.ok
-        ) {
-          result.push({
-            league:
-              config.league,
-
-            code:
-              config.code,
-
-            csvRows:
-              0,
-
-            finishedMatches:
-              0,
-
-            oddsComplete:
-              0,
-
-            oddsMissing:
-              0,
-
-            skipped:
-              0,
-
-            upserted:
-              0,
-
-            status:
-              "skipped",
-
-            message:
-              `CSV HTTP ${response.status}`,
-          });
-
-          console.warn(
-            `⚠️ ${config.league} 暫無可用 CSV：HTTP ${response.status}`,
-          );
-
-          continue;
-        }
-
-        const csv =
-          await response.text();
-
-        const matches =
-          parseCsv(
-            csv,
-          );
-
-        const rows:
-          HistoryRow[] =
-          [];
-
-        let skipped =
-          0;
-
-        let oddsComplete =
-          0;
-
-        let oddsMissing =
-          0;
-
-        for (
-          const match
-          of matches
-        ) {
-          const homeTeam =
-            match.HomeTeam
-              ?.trim();
-
-          const awayTeam =
-            match.AwayTeam
-              ?.trim();
-
-          const homeScore =
-            parseScore(
-              match.FTHG,
-            );
-
-          const awayScore =
-            parseScore(
-              match.FTAG,
-            );
-
-          const matchDate =
-            parseMatchDate(
-              match.Date,
-              match.Time,
-            );
-
-          if (
-            !homeTeam ||
-            !awayTeam ||
-            !matchDate ||
-            homeScore ===
-              null ||
-            awayScore ===
-              null
-          ) {
-            skipped +=
-              1;
-
-            continue;
-          }
-
-          const odds =
-            getHistoricalOdds(
-              match,
-            );
-
-          if (
-            odds.home !==
-              null &&
-            odds.draw !==
-              null &&
-            odds.away !==
-              null
-          ) {
-            oddsComplete +=
-              1;
-          } else {
-            oddsMissing +=
-              1;
-          }
-
-          rows.push({
-            external_id:
-              createExternalId({
-                leagueCode:
-                  config.code,
-
-                seasonCode,
-
-                date:
-                  matchDate,
-
-                homeTeam,
-
-                awayTeam,
-              }),
-
-            league:
-              config.league,
-
-            season,
-
-            match_date:
-              matchDate
-                .toISOString(),
-
-            home_team:
-              homeTeam,
-
-            away_team:
-              awayTeam,
-
-            home_score:
-              homeScore,
-
-            away_score:
-              awayScore,
-
-            home_odds:
-              odds.home,
-
-            draw_odds:
-              odds.draw,
-
-            away_odds:
-              odds.away,
-
-            status:
-              "finished",
-
-            source:
-              SOURCE,
-
-            updated_at:
-              new Date()
-                .toISOString(),
-          });
-        }
-
-        const upserted =
-          await upsertLeagueRows({
-            supabase,
-
-            league:
-              config.league,
-
-            rows,
-          });
-
-        result.push({
-          league:
-            config.league,
-
-          code:
-            config.code,
-
-          csvRows:
-            matches.length,
-
-          finishedMatches:
-            rows.length,
-
-          oddsComplete,
-
-          oddsMissing,
-
-          skipped,
-
-          upserted,
-
-          status:
-            "ok",
-        });
-
-        console.log(
-          `🎉 ${config.league} 完成：${upserted} 場`,
+          },
         );
-      } catch (
-        error
-      ) {
-        const message =
-          error instanceof
-          Error
-            ? error.message
-            : String(
-                error,
-              );
 
+      if (
+        !response.ok
+      ) {
         result.push({
           league:
             config.league,
@@ -1162,108 +914,280 @@ export async function GET() {
             0,
 
           status:
-            "error",
+            "skipped",
 
-          message,
+          message:
+            `CSV HTTP ${response.status}`,
         });
 
-        console.error(
-          `❌ ${config.league} 同步失敗：`,
-          error,
+        console.warn(
+          `⚠️ ${config.league} 暫無可用 CSV：HTTP ${response.status}`,
         );
+
+        continue;
       }
-    }
 
-    const totalUpserted =
-      result.reduce(
-        (
-          sum,
-          item,
-        ) =>
-          sum +
-          item.upserted,
-        0,
-      );
+      const csv =
+        await response.text();
 
-    console.log(
-      "======================================",
-    );
+      const matches =
+        parseCsv(
+          csv,
+        );
 
-    console.log(
-      `🏁 FIVE LEAGUES COMPLETE：${totalUpserted}`,
-    );
+      const rows:
+        HistoryRow[] =
+        [];
 
-    console.log(
-      "======================================",
-    );
+      let skipped =
+        0;
 
-    /*
-     * 賽果同步完成後直接結算足球 prediction_history。
-     */
-    let settlement:
-      Awaited<
-        ReturnType<
-          typeof settleFootballPredictions
-        >
-      > |
-      null =
-      null;
+      let oddsComplete =
+        0;
 
-    try {
-      settlement =
-        await settleFootballPredictions();
+      let oddsMissing =
+        0;
+
+      for (
+        const match
+        of matches
+      ) {
+        const homeTeam =
+          match.HomeTeam
+            ?.trim();
+
+        const awayTeam =
+          match.AwayTeam
+            ?.trim();
+
+        const homeScore =
+          parseScore(
+            match.FTHG,
+          );
+
+        const awayScore =
+          parseScore(
+            match.FTAG,
+          );
+
+        const matchDate =
+          parseMatchDate(
+            match.Date,
+            match.Time,
+          );
+
+        if (
+          !homeTeam ||
+          !awayTeam ||
+          !matchDate ||
+          homeScore ===
+            null ||
+          awayScore ===
+            null
+        ) {
+          skipped +=
+            1;
+
+          continue;
+        }
+
+        const odds =
+          getHistoricalOdds(
+            match,
+          );
+
+        if (
+          odds.home !==
+            null &&
+          odds.draw !==
+            null &&
+          odds.away !==
+            null
+        ) {
+          oddsComplete +=
+            1;
+        } else {
+          oddsMissing +=
+            1;
+        }
+
+        rows.push({
+          external_id:
+            createExternalId({
+              leagueCode:
+                config.code,
+
+              seasonCode,
+
+              date:
+                matchDate,
+
+              homeTeam,
+
+              awayTeam,
+            }),
+
+          league:
+            config.league,
+
+          season,
+
+          match_date:
+            matchDate
+              .toISOString(),
+
+          home_team:
+            homeTeam,
+
+          away_team:
+            awayTeam,
+
+          home_score:
+            homeScore,
+
+          away_score:
+            awayScore,
+
+          home_odds:
+            odds.home,
+
+          draw_odds:
+            odds.draw,
+
+          away_odds:
+            odds.away,
+
+          status:
+            "finished",
+
+          source:
+            SOURCE,
+
+          updated_at:
+            new Date()
+              .toISOString(),
+        });
+      }
+
+      const upserted =
+        await upsertLeagueRows({
+          supabase,
+
+          league:
+            config.league,
+
+          rows,
+        });
+
+      result.push({
+        league:
+          config.league,
+
+        code:
+          config.code,
+
+        csvRows:
+          matches.length,
+
+        finishedMatches:
+          rows.length,
+
+        oddsComplete,
+
+        oddsMissing,
+
+        skipped,
+
+        upserted,
+
+        status:
+          "ok",
+      });
 
       console.log(
-        "⚽ Football Settlement：",
-        settlement,
+        `🎉 ${config.league} 完成：${upserted} 場`,
       );
     } catch (
       error
     ) {
+      const message =
+        error instanceof
+        Error
+          ? error.message
+          : String(
+              error,
+            );
+
+      result.push({
+        league:
+          config.league,
+
+        code:
+          config.code,
+
+        csvRows:
+          0,
+
+        finishedMatches:
+          0,
+
+        oddsComplete:
+          0,
+
+        oddsMissing:
+          0,
+
+        skipped:
+          0,
+
+        upserted:
+          0,
+
+        status:
+          "error",
+
+        message,
+      });
+
       console.error(
-        "❌ Football Settlement Error：",
+        `❌ ${config.league} 同步失敗：`,
         error,
       );
     }
-
-    return NextResponse.json({
-      success:
-        true,
-
-      season,
-
-      totalUpserted,
-
-      leagues:
-        result,
-
-      settlement,
-    });
-  } catch (
-    error
-  ) {
-    console.error(
-      "❌ Five Leagues History Sync Error：",
-      error,
-    );
-
-    return NextResponse.json(
-      {
-        success:
-          false,
-
-        message:
-          error instanceof
-          Error
-            ? error.message
-            : String(
-                error,
-              ),
-      },
-      {
-        status:
-          500,
-      },
-    );
   }
+
+  const totalUpserted =
+    result.reduce(
+      (
+        sum,
+        item,
+      ) =>
+        sum +
+        item.upserted,
+      0,
+    );
+
+  console.log(
+    "======================================",
+  );
+
+  console.log(
+    `🏁 FIVE LEAGUES COMPLETE：${totalUpserted}`,
+  );
+
+  console.log(
+    "======================================",
+  );
+
+  return {
+    success:
+      true,
+
+    season,
+
+    totalUpserted,
+
+    leagues:
+      result,
+  };
 }

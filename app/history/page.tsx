@@ -2,6 +2,11 @@ import Link from "next/link";
 
 import { createAdminClient } from "../../lib/supabase/admin";
 
+import {
+  getPredictionHistoryStats,
+  isValidPrediction,
+} from "../../lib/prediction/historyStats";
+
 export const dynamic = "force-dynamic";
 
 type PredictionHistory = {
@@ -43,6 +48,17 @@ function getResultInfo(result: string) {
       label: "未命中",
       className:
         "border-red-500/30 bg-red-500/10 text-red-400",
+    };
+  }
+
+  if (
+    value === "push" ||
+    value === "void"
+  ) {
+    return {
+      label: "走盤",
+      className:
+        "border-sky-500/30 bg-sky-500/10 text-sky-400",
     };
   }
 
@@ -160,90 +176,64 @@ export default async function HistoryPage() {
     (data ??
       []) as PredictionHistory[];
 
-  const settledGames =
+  /*
+   * ==========================================
+   * 統一使用 historyStats.ts
+   * MLB + FOOTBALL
+   * ==========================================
+   */
+  const validHistories =
     histories.filter(
       (item) =>
-        [
-          "win",
-          "won",
-          "correct",
-          "loss",
-          "lose",
-          "lost",
-          "wrong",
-        ].includes(
-          item.result?.toLowerCase(),
+        isValidPrediction(
+          item,
         ),
     );
 
-  const wins =
-    settledGames.filter(
-      (item) =>
-        [
-          "win",
-          "won",
-          "correct",
-        ].includes(
-          item.result?.toLowerCase(),
-        ),
-    ).length;
+  const stats =
+    getPredictionHistoryStats(
+      histories,
+    );
 
-  const losses =
-    settledGames.filter(
-      (item) =>
-        [
-          "loss",
-          "lose",
-          "lost",
-          "wrong",
-        ].includes(
-          item.result?.toLowerCase(),
-        ),
-    ).length;
-
-  /* ==========================================
-     XSI 歷史基準
-  ========================================== */
-
+  /*
+   * ==========================================
+   * XSI 歷史基準
+   * ==========================================
+   */
   const BASE_TOTAL = 354;
   const BASE_WINS = 269;
   const BASE_LOSSES = 85;
 
-  const pending =
-    histories.length -
-    settledGames.length;
+  const totalPredictions =
+    BASE_TOTAL +
+    stats.validRecords;
 
   const totalWins =
     BASE_WINS +
-    wins;
+    stats.wins;
 
   const totalLosses =
     BASE_LOSSES +
-    losses;
+    stats.losses;
 
-  const BASE_DATABASE_COUNT =
-    4;
+  const pushes =
+    stats.pushes;
 
-  const newPredictionCount =
-    Math.max(
-      histories.length -
-        BASE_DATABASE_COUNT,
-      0,
-    );
+  const pending =
+    stats.pending;
 
-  const totalPredictions =
-    BASE_TOTAL +
-    newPredictionCount;
-
-  const totalSettled =
+  /*
+   * 走盤已結算，但不納入勝率分母。
+   */
+  const totalSettledForWinRate =
     totalWins +
     totalLosses;
 
   const winRate =
-    totalSettled > 0
+    totalSettledForWinRate > 0
       ? Math.round(
           (totalWins /
-            totalSettled) *
+            totalSettledForWinRate) *
             1000,
         ) / 10
       : 0;
@@ -259,7 +249,7 @@ export default async function HistoryPage() {
     getYesterdayKey();
 
   const todayHistories =
-    histories.filter(
+    validHistories.filter(
       (item) =>
         getTaiwanDateKey(
           new Date(
@@ -269,7 +259,7 @@ export default async function HistoryPage() {
     );
 
   const yesterdayHistories =
-    histories.filter(
+    validHistories.filter(
       (item) =>
         getTaiwanDateKey(
           new Date(
@@ -280,7 +270,7 @@ export default async function HistoryPage() {
     );
 
   const olderHistories =
-    histories.filter(
+    validHistories.filter(
       (item) => {
         const key =
           getTaiwanDateKey(
@@ -353,7 +343,7 @@ export default async function HistoryPage() {
         </div>
 
         {/* Summary */}
-        <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-5">
 
           <StatCard
             label="總預測"
@@ -373,6 +363,13 @@ export default async function HistoryPage() {
             label="未命中"
             value={
               totalLosses
+            }
+          />
+
+          <StatCard
+            label="走盤"
+            value={
+              pushes
             }
           />
 
@@ -412,7 +409,7 @@ export default async function HistoryPage() {
             </p>
 
           </div>
-        ) : histories.length ===
+        ) : validHistories.length ===
           0 ? (
           <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center">
 
@@ -421,14 +418,14 @@ export default async function HistoryPage() {
             </p>
 
             <p className="mt-2 text-sm text-zinc-500">
-              查看 MLB AI 分析後，預測會自動加入這裡。
+              MLB 與足球 AI 分析完成後，預測會自動加入這裡。
             </p>
 
             <Link
-              href="/mlb"
+              href="/"
               className="mt-5 inline-flex rounded-xl bg-yellow-400 px-5 py-3 text-sm font-black text-black transition hover:bg-yellow-300"
             >
-              查看 MLB 賽事
+              返回首頁
             </Link>
 
           </div>

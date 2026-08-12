@@ -11,9 +11,6 @@ import {
   settleMlbPredictions,
 } from "../lib/prediction/settleMlbPredictions";
 
-import {
-  settleFootballPredictions,
-} from "../lib/prediction/settleFootballPredictions";
 
 import {
   getPredictionHistoryStats,
@@ -123,21 +120,7 @@ export default async function Home() {
    * 足球自動結算
    * ==========================================
    */
-  try {
-    const settlement =
-      await settleFootballPredictions();
-
-    console.log(
-      "首頁足球自動結算結果:",
-      settlement,
-    );
-  } catch (error) {
-    console.error(
-      "首頁足球自動結算失敗:",
-      error,
-    );
-  }
-
+  
   const supabase =
     createAdminClient();
 
