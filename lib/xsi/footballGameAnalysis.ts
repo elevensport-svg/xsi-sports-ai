@@ -31,6 +31,21 @@ type ThreeWayProbability = {
   away: number;
 };
 
+export type FootballXsiScoreBreakdown = {
+  teamStrength: number;
+  recentForm: number;
+  homeAway: number;
+  attack: number;
+  defense: number;
+  market: number;
+  spread: number;
+  value: number;
+  consistency: number;
+  dataCompleteness: number;
+  historicalReliability: number;
+  total: number;
+};
+
 export type FootballGameAnalysis = {
   game: FootballGame;
 
@@ -40,6 +55,8 @@ export type FootballGameAnalysis = {
     text: string;
 
     confidence: number;
+
+    xsiScore: FootballXsiScoreBreakdown;
 
     risk:
       | "低風險"
@@ -709,6 +726,598 @@ function addCandidate(
 }
 
 /* ==========================================
+   XSI SCORE V2 / 100
+
+   11 個正式評分模組：
+   - 球隊實力          /15
+   - 近期狀態          /12
+   - 主客場            /8
+   - 進攻能力          /10
+   - 防守能力          /10
+   - 市場賠率          /10
+   - 讓球盤            /8
+   - Value             /10
+   - 模型一致性        /7
+   - 資料完整度        /5
+   - 歷史模型可靠度    /5
+
+   注意：
+   - 這是「推薦強度」，不是命中率。
+   - Totals V6 不納入此分數。
+   - 歷史可靠度目前只有西甲 2025/26 的
+     V2 驗證結果可用，因此先採保守基準。
+========================================== */
+
+function clampScore(
+  value: number,
+  max: number,
+) {
+  return Math.max(
+    0,
+    Math.min(
+      max,
+      Number(
+        value.toFixed(
+          1,
+        ),
+      ),
+    ),
+  );
+}
+
+function getRecommendedSide(
+  type: FootballRecommendationType,
+):
+  | "home"
+  | "away"
+  | "draw" {
+  if (
+    type === "主勝" ||
+    type === "主隊讓球" ||
+    type === "主隊受讓"
+  ) {
+    return "home";
+  }
+
+  if (
+    type === "客勝" ||
+    type === "客隊讓球" ||
+    type === "客隊受讓"
+  ) {
+    return "away";
+  }
+
+  return "draw";
+}
+
+function calculateXsiScoreV2({
+  best,
+  second,
+  marketProbability,
+  probabilities,
+  homeForm,
+  awayForm,
+  homeAttack,
+  awayAttack,
+  homeDefense,
+  awayDefense,
+  homeSpread,
+  awaySpread,
+  homeValue,
+  drawValue,
+  awayValue,
+  hasFormData,
+  validOneXTwoCount,
+}: {
+  best: Candidate;
+  second:
+    | Candidate
+    | undefined;
+
+  marketProbability:
+    ThreeWayProbability;
+
+  probabilities:
+    ThreeWayProbability;
+
+  homeForm: {
+    formScore: number;
+    matchesPlayed: number;
+    averageGoalsFor: number;
+    averageGoalsAgainst: number;
+  };
+
+  awayForm: {
+    formScore: number;
+    matchesPlayed: number;
+    averageGoalsFor: number;
+    averageGoalsAgainst: number;
+  };
+
+  homeAttack: number;
+  awayAttack: number;
+  homeDefense: number;
+  awayDefense: number;
+
+  homeSpread:
+    | number
+    | null;
+
+  awaySpread:
+    | number
+    | null;
+
+  homeValue: number;
+  drawValue: number;
+  awayValue: number;
+
+  hasFormData: boolean;
+
+  validOneXTwoCount: number;
+}): FootballXsiScoreBreakdown {
+  const side =
+    getRecommendedSide(
+      best.type,
+    );
+
+  const sideProbability =
+    side === "home"
+      ? probabilities.home
+      : side === "away"
+        ? probabilities.away
+        : probabilities.draw;
+
+  const sideMarketProbability =
+    side === "home"
+      ? marketProbability.home
+      : side === "away"
+        ? marketProbability.away
+        : marketProbability.draw;
+
+  const sideValue =
+    side === "home"
+      ? homeValue
+      : side === "away"
+        ? awayValue
+        : drawValue;
+
+  const sideForm =
+    side === "home"
+      ? homeForm.formScore
+      : side === "away"
+        ? awayForm.formScore
+        : (
+            homeForm.formScore +
+            awayForm.formScore
+          ) /
+          2;
+
+  const opponentForm =
+    side === "home"
+      ? awayForm.formScore
+      : side === "away"
+        ? homeForm.formScore
+        : sideForm;
+
+  const sideAttack =
+    side === "home"
+      ? homeAttack
+      : side === "away"
+        ? awayAttack
+        : (
+            homeAttack +
+            awayAttack
+          ) /
+          2;
+
+  const opponentAttack =
+    side === "home"
+      ? awayAttack
+      : side === "away"
+        ? homeAttack
+        : sideAttack;
+
+  const sideDefense =
+    side === "home"
+      ? homeDefense
+      : side === "away"
+        ? awayDefense
+        : (
+            homeDefense +
+            awayDefense
+          ) /
+          2;
+
+  const opponentDefense =
+    side === "home"
+      ? awayDefense
+      : side === "away"
+        ? homeDefense
+        : sideDefense;
+
+  /*
+   * 1. 球隊實力 /15
+   *
+   * 目前沒有獨立 Elo / Power Rating，
+   * 所以只使用已有的 XSI side probability
+   * 與 Form 差距做保守估計。
+   */
+  const teamStrength =
+    clampScore(
+      6 +
+        (
+          sideProbability -
+          33.3
+        ) *
+          0.16 +
+        (
+          sideForm -
+          opponentForm
+        ) *
+          0.035,
+      15,
+    );
+
+  /*
+   * 2. 近期狀態 /12
+   */
+  const recentForm =
+    hasFormData
+      ? clampScore(
+          side === "draw"
+            ? 6 +
+                (
+                  15 -
+                  Math.min(
+                    15,
+                    Math.abs(
+                      homeForm.formScore -
+                      awayForm.formScore,
+                    ),
+                  )
+                ) *
+                  0.2
+            : 4 +
+                sideForm *
+                  0.06 +
+                Math.max(
+                  -2,
+                  Math.min(
+                    2,
+                    (
+                      sideForm -
+                      opponentForm
+                    ) *
+                      0.04,
+                  ),
+                ),
+          12,
+        )
+      : 2;
+
+  /*
+   * 3. 主客場 /8
+   *
+   * 現有模型只有已回測的 homeEdge = +3，
+   * 尚無真正 home/away split，因此不假造 split。
+   */
+  let homeAway =
+    4;
+
+  if (
+    side === "home"
+  ) {
+    homeAway = 6.5;
+  } else if (
+    side === "away"
+  ) {
+    homeAway = 4.5;
+  } else {
+    homeAway = 5;
+  }
+
+  homeAway =
+    clampScore(
+      homeAway,
+      8,
+    );
+
+  /*
+   * 4. 進攻能力 /10
+   */
+  const attack =
+    hasFormData
+      ? clampScore(
+          3 +
+            sideAttack *
+              0.06 +
+            (
+              sideAttack -
+              opponentAttack
+            ) *
+              0.025,
+          10,
+        )
+      : 2;
+
+  /*
+   * 5. 防守能力 /10
+   */
+  const defense =
+    hasFormData
+      ? clampScore(
+          3 +
+            sideDefense *
+              0.06 +
+            (
+              sideDefense -
+              opponentDefense
+            ) *
+              0.03,
+          10,
+        )
+      : 2;
+
+  /*
+   * 6. 市場賠率 /10
+   *
+   * 市場越支持推薦方向，分數越高；
+   * 但不把低賠直接等同高品質推薦。
+   */
+  const market =
+    validOneXTwoCount ===
+    3
+      ? clampScore(
+          2 +
+            sideMarketProbability *
+              0.11,
+          10,
+        )
+      : 1;
+
+  /*
+   * 7. 讓球盤 /8
+   */
+  let spread =
+    3;
+
+  const recommendedSpread =
+    side === "home"
+      ? homeSpread
+      : side === "away"
+        ? awaySpread
+        : null;
+
+  if (
+    best.type === "主隊受讓" ||
+    best.type === "客隊受讓"
+  ) {
+    spread =
+      recommendedSpread !==
+        null
+        ? 5 +
+          Math.min(
+            3,
+            Math.max(
+              0,
+              recommendedSpread,
+            ) *
+              2,
+          )
+        : 4;
+  } else if (
+    best.type === "主隊讓球" ||
+    best.type === "客隊讓球"
+  ) {
+    const absSpread =
+      recommendedSpread ===
+        null
+        ? 0
+        : Math.abs(
+            recommendedSpread,
+          );
+
+    spread =
+      6 -
+      Math.min(
+        3,
+        absSpread *
+          1.5,
+      );
+
+    if (
+      sideValue >= 4
+    ) {
+      spread += 1.5;
+    }
+  } else if (
+    recommendedSpread !==
+      null
+  ) {
+    const marketSupportsSide =
+      recommendedSpread <
+      0;
+
+    spread =
+      marketSupportsSide
+        ? 6
+        : 3.5;
+  }
+
+  spread =
+    clampScore(
+      spread,
+      8,
+    );
+
+  /*
+   * 8. Value /10
+   */
+  const value =
+    clampScore(
+      4 +
+        sideValue *
+          0.8,
+      10,
+    );
+
+  /*
+   * 9. 模型一致性 /7
+   *
+   * 第一候選與第二候選差距 +
+   * XSI 與市場是否同方向。
+   */
+  const candidateGap =
+    second
+      ? best.score -
+        second.score
+      : 0;
+
+  const marketLeader =
+    marketProbability.home >=
+      marketProbability.away &&
+    marketProbability.home >=
+      marketProbability.draw
+      ? "home"
+      : marketProbability.away >=
+            marketProbability.home &&
+          marketProbability.away >=
+            marketProbability.draw
+        ? "away"
+        : "draw";
+
+  const modelLeader =
+    probabilities.home >=
+      probabilities.away &&
+    probabilities.home >=
+      probabilities.draw
+      ? "home"
+      : probabilities.away >=
+            probabilities.home &&
+          probabilities.away >=
+            probabilities.draw
+        ? "away"
+        : "draw";
+
+  const consistency =
+    clampScore(
+      2 +
+        Math.min(
+          3,
+          Math.max(
+            0,
+            candidateGap,
+          ) *
+            0.25,
+        ) +
+        (
+          modelLeader ===
+          side
+            ? 1
+            : 0
+        ) +
+        (
+          marketLeader ===
+          side
+            ? 1
+            : 0
+        ),
+      7,
+    );
+
+  /*
+   * 10. 資料完整度 /5
+   */
+  let dataCompleteness =
+    0;
+
+  if (
+    hasFormData
+  ) {
+    dataCompleteness +=
+      2.5;
+  }
+
+  dataCompleteness +=
+    (
+      validOneXTwoCount /
+      3
+    ) *
+    1.5;
+
+  if (
+    homeSpread !==
+      null ||
+    awaySpread !==
+      null
+  ) {
+    dataCompleteness +=
+      1;
+  }
+
+  dataCompleteness =
+    clampScore(
+      dataCompleteness,
+      5,
+    );
+
+  /*
+   * 11. 歷史模型可靠度 /5
+   *
+   * 目前程式只有：
+   * 西甲 2025/26 Validation
+   * V2 = 56.2%
+   * Market = 54.3%
+   *
+   * FootballGame 目前沒有可靠 league 欄位
+   * 可在此安全辨識每場聯賽，
+   * 因此不能把所有比賽都當西甲。
+   *
+   * 先給保守 2.5 / 5。
+   * 未來接 league-specific backtest 後再動態計分。
+   */
+  const historicalReliability =
+    2.5;
+
+  const total =
+    Math.round(
+      teamStrength +
+        recentForm +
+        homeAway +
+        attack +
+        defense +
+        market +
+        spread +
+        value +
+        consistency +
+        dataCompleteness +
+        historicalReliability,
+    );
+
+  return {
+    teamStrength,
+    recentForm,
+    homeAway,
+    attack,
+    defense,
+    market,
+    spread,
+    value,
+    consistency,
+    dataCompleteness,
+    historicalReliability,
+    total:
+      Math.max(
+        0,
+        Math.min(
+          100,
+          total,
+        ),
+      ),
+  };
+}
+
+/* ==========================================
    MAIN
 ========================================== */
 
@@ -1268,76 +1877,13 @@ export async function calculateFootballGameAnalysis(
 
   /* ========================================
      STEP 7
-     Confidence V2
+     XSI SCORE V2 / 100
 
-     Confidence 不再直接等同命中率。
-
-     主要參考：
-     - 第一候選分數
-     - 第一 / 第二候選差距
-     - Form 資料完整度
-     - 1X2 市場完整度
-
-     避免只因候選差距大，
-     就直接衝到 88。
+     11 項正式評分。
+     recommendation.confidence 暫時沿用此總分，
+     讓既有 prediction_history / 前端不用改 schema。
   ======================================== */
 
-  let confidence =
-    52;
-
-  /*
-   * 推薦本身的分數。
-   *
-   * 50 分附近不額外加太多，
-   * 高於 50 才逐步增加。
-   */
-  confidence +=
-    Math.max(
-      -3,
-      Math.min(
-        8,
-        (
-          best.score -
-          50
-        ) *
-          0.25,
-      ),
-    );
-
-  /*
-   * 第一候選和第二候選差距。
-   *
-   * 最多只加 6，
-   * 不再讓 candidateGap 主導 Confidence。
-   */
-  confidence +=
-    Math.max(
-      0,
-      Math.min(
-        6,
-        candidateGap *
-          0.5,
-      ),
-    );
-
-  /*
-   * 有完整近期資料才加分。
-   */
-  if (
-    hasFormData
-  ) {
-    confidence += 4;
-  } else {
-    confidence -= 8;
-
-    best.reasons.push(
-      "近期球隊資料不足，本場 XSI 主要依市場資料判斷",
-    );
-  }
-
-  /*
-   * 市場資料完整度
-   */
   const validOneXTwoCount =
     [
       homeWinOdds,
@@ -1352,67 +1898,54 @@ export async function calculateFootballGameAnalysis(
         value > 1,
     ).length;
 
-  if (
-    validOneXTwoCount ===
-    3
-  ) {
-    confidence += 2;
-  } else {
-    confidence -= 8;
+  const xsiScore =
+    calculateXsiScoreV2({
+      best,
+      second,
 
-    best.reasons.push(
-      "1X2 市場資料不完整，信心度下修",
-    );
-  }
+      marketProbability,
+      probabilities,
 
-  /*
-   * 如果最佳推薦是 1X2，
-   * 再看 XSI 是否真的比市場有額外 Value。
-   */
-  let bestOneXTwoValue =
-    0;
+      homeForm,
+      awayForm,
 
-  if (
-    best.type ===
-    "主勝"
-  ) {
-    bestOneXTwoValue =
-      homeValue;
-  } else if (
-    best.type ===
-    "和局"
-  ) {
-    bestOneXTwoValue =
-      drawValue;
-  } else if (
-    best.type ===
-    "客勝"
-  ) {
-    bestOneXTwoValue =
-      awayValue;
-  }
+      homeAttack,
+      awayAttack,
 
-  if (
-    bestOneXTwoValue >=
-    4
-  ) {
-    confidence += 4;
-  } else if (
-    bestOneXTwoValue >=
-    2
-  ) {
-    confidence += 2;
-  } else if (
-    bestOneXTwoValue <
-      -2
-  ) {
-    confidence -= 3;
-  }
+      homeDefense,
+      awayDefense,
+
+      homeSpread,
+      awaySpread,
+
+      homeValue,
+      drawValue,
+      awayValue,
+
+      hasFormData,
+
+      validOneXTwoCount,
+    });
 
   const finalConfidence =
-    clampConfidence(
-      confidence,
+    xsiScore.total;
+
+  if (
+    !hasFormData
+  ) {
+    best.reasons.push(
+      "近期球隊資料不足，XSI Score 已降低資料完整度與 Form / Attack / Defense 評分",
     );
+  }
+
+  if (
+    validOneXTwoCount !==
+    3
+  ) {
+    best.reasons.push(
+      "1X2 市場資料不完整，XSI Score 已降低市場與資料完整度評分",
+    );
+  }
 
 
   /* ========================================
@@ -1470,7 +2003,12 @@ export async function calculateFootballGameAnalysis(
   );
 
   console.log(
-    `Confidence：${finalConfidence}`,
+    `XSI SCORE V2：${finalConfidence}/100`,
+  );
+
+  console.log(
+    "XSI Breakdown：",
+    xsiScore,
   );
 
   console.log(
@@ -1494,6 +2032,8 @@ export async function calculateFootballGameAnalysis(
       confidence:
         finalConfidence,
 
+      xsiScore,
+
       risk:
         getRisk(
           finalConfidence,
@@ -1509,6 +2049,16 @@ export async function calculateFootballGameAnalysis(
         `第二候選差距：${candidateGap.toFixed(
           1,
         )}`,
+
+        `XSI Score V2：${xsiScore.total}/100`,
+
+        `球隊實力 ${xsiScore.teamStrength}/15｜近期狀態 ${xsiScore.recentForm}/12｜主客場 ${xsiScore.homeAway}/8`,
+
+        `進攻 ${xsiScore.attack}/10｜防守 ${xsiScore.defense}/10｜市場 ${xsiScore.market}/10`,
+
+        `讓球盤 ${xsiScore.spread}/8｜Value ${xsiScore.value}/10｜模型一致性 ${xsiScore.consistency}/7`,
+
+        `資料完整度 ${xsiScore.dataCompleteness}/5｜歷史可靠度 ${xsiScore.historicalReliability}/5`,
       ],
     },
 

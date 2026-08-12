@@ -240,6 +240,78 @@ function getLeagueIcon(
   return "⚽";
 }
 
+
+function hashString(
+  value: string,
+) {
+  let hash =
+    2166136261;
+
+  for (
+    let index = 0;
+    index < value.length;
+    index += 1
+  ) {
+    hash ^=
+      value.charCodeAt(
+        index,
+      );
+
+    hash =
+      Math.imul(
+        hash,
+        16777619,
+      );
+  }
+
+  return hash >>> 0;
+}
+
+function getTaiwanDateKey() {
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone:
+          "Asia/Taipei",
+
+        year:
+          "numeric",
+
+        month:
+          "2-digit",
+
+        day:
+          "2-digit",
+      },
+    ).formatToParts(
+      new Date(),
+    );
+
+  const year =
+    parts.find(
+      (part) =>
+        part.type ===
+        "year",
+    )?.value ?? "";
+
+  const month =
+    parts.find(
+      (part) =>
+        part.type ===
+        "month",
+    )?.value ?? "";
+
+  const day =
+    parts.find(
+      (part) =>
+        part.type ===
+        "day",
+    )?.value ?? "";
+
+  return `${year}-${month}-${day}`;
+}
+
 export default async function FootballPage({
   searchParams,
 }: FootballPageProps) {
@@ -433,6 +505,61 @@ export default async function FootballPage({
       },
     );
   }
+
+  /*
+   * ==========================================
+   * DAILY FREE FOOTBALL PICKS
+   *
+   * - 每天固定 3 場免費
+   * - 只從已有 AI 預測的賽事抽取
+   * - 同一天重新整理不會改變
+   * - 隔天自動重新抽取
+   * ==========================================
+   */
+  const taiwanDateKey =
+    getTaiwanDateKey();
+
+  const freeGameIds =
+    new Set(
+      games
+        .filter(
+          (game) =>
+            predictionMap.has(
+              String(
+                game.id,
+              ),
+            ),
+        )
+        .map(
+          (game) => ({
+            id:
+              String(
+                game.id,
+              ),
+
+            rank:
+              hashString(
+                `${taiwanDateKey}:${game.id}`,
+              ),
+          }),
+        )
+        .sort(
+          (
+            a,
+            b,
+          ) =>
+            a.rank -
+            b.rank,
+        )
+        .slice(
+          0,
+          3,
+        )
+        .map(
+          (item) =>
+            item.id,
+        ),
+    );
 
   const analyzedCount =
     predictionMap.size;
@@ -690,12 +817,24 @@ export default async function FootballPage({
 
             {filteredGames.map(
               (game) => {
+                const gameId =
+                  String(
+                    game.id,
+                  );
+
                 const prediction =
                   predictionMap.get(
-                    String(
-                      game.id,
-                    ),
+                    gameId,
                   );
+
+                const isFreeGame =
+                  freeGameIds.has(
+                    gameId,
+                  );
+
+                const canViewPrediction =
+                  membership.isVip ||
+                  isFreeGame;
 
                 return (
                   <div
@@ -780,23 +919,45 @@ export default async function FootballPage({
                             XSI AI Recommendation
                           </p>
 
-                          {prediction && (
-                            <span
-                              className={`rounded-full border px-3 py-1 text-[10px] font-black ${getResultClass(
-                                prediction.result,
-                              )}`}
-                            >
-                              {
-                                getResultLabel(
+                          <div className="flex items-center gap-2">
+
+                            {prediction && (
+                              <span
+                                className={`rounded-full border px-3 py-1 text-[10px] font-black ${
+                                  isFreeGame
+                                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                                    : "border-yellow-500/20 bg-yellow-400/10 text-yellow-400"
+                                }`}
+                              >
+                                {
+                                  isFreeGame
+                                    ? "FREE"
+                                    : "VIP"
+                                }
+                              </span>
+                            )}
+
+                            {prediction &&
+                              canViewPrediction && (
+                              <span
+                                className={`rounded-full border px-3 py-1 text-[10px] font-black ${getResultClass(
                                   prediction.result,
-                                )
-                              }
-                            </span>
-                          )}
+                                )}`}
+                              >
+                                {
+                                  getResultLabel(
+                                    prediction.result,
+                                  )
+                                }
+                              </span>
+                            )}
+
+                          </div>
 
                         </div>
 
-                        {prediction ? (
+                        {prediction &&
+                        canViewPrediction ? (
                           <>
                             <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
 
@@ -897,6 +1058,22 @@ export default async function FootballPage({
                               </div>
                             )}
                           </>
+                        ) : prediction ? (
+                          <div className="mt-4 rounded-xl border border-yellow-500/20 bg-zinc-950/70 p-5 text-center">
+
+                            <div className="text-2xl">
+                              🔒
+                            </div>
+
+                            <p className="mt-3 text-base font-black text-yellow-400">
+                              VIP 專屬預測
+                            </p>
+
+                            <p className="mt-2 text-xs leading-5 text-zinc-500">
+                              今日免費提供 3 場足球 AI 預測，其餘賽事僅限 VIP 查看。
+                            </p>
+
+                          </div>
                         ) : (
                           <div className="mt-3">
 

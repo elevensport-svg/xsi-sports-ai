@@ -9,114 +9,97 @@ import {
 export const dynamic =
   "force-dynamic";
 
-/* ==========================================
-   Football-Data.co.uk
-
-   2025/26 西甲
-   SP1 = Spanish La Liga
-========================================== */
-
-const CSV_URL =
-  "https://www.football-data.co.uk/mmz4281/2526/SP1.csv";
-
-const LEAGUE =
-  "西甲";
-
 const SEASON =
   "2025/26";
 
 const SOURCE =
   "football-data.co.uk";
 
-/* ==========================================
-   CSV Row
+type LeagueConfig = {
+  code: string;
+  league: string;
+};
 
-   除了比分，
-   加入歷史 1X2 賠率。
-
-   優先使用：
-   AvgCH / AvgCD / AvgCA
-   = Closing Average Odds
-========================================== */
+const LEAGUES:
+  LeagueConfig[] = [
+    {
+      code:
+        "E0",
+      league:
+        "英超",
+    },
+    {
+      code:
+        "SP1",
+      league:
+        "西甲",
+    },
+    {
+      code:
+        "I1",
+      league:
+        "義甲",
+    },
+    {
+      code:
+        "D1",
+      league:
+        "德甲",
+    },
+    {
+      code:
+        "F1",
+      league:
+        "法甲",
+    },
+  ];
 
 type CsvMatch = {
   Div: string;
-
   Date: string;
-
   Time?: string;
-
   HomeTeam: string;
-
   AwayTeam: string;
-
   FTHG: string;
-
   FTAG: string;
-
   FTR?: string;
 
-  /* 開盤 / 較早市場平均 */
   AvgH?: string;
   AvgD?: string;
   AvgA?: string;
 
-  /* 收盤市場平均 */
   AvgCH?: string;
   AvgCD?: string;
   AvgCA?: string;
 
-  /* Bet365 開盤 */
   B365H?: string;
   B365D?: string;
   B365A?: string;
 
-  /* Bet365 收盤 */
   B365CH?: string;
   B365CD?: string;
   B365CA?: string;
 };
 
-/* ==========================================
-   Supabase Row
-========================================== */
-
 type HistoryRow = {
   external_id: string;
-
   league: string;
-
   season: string;
-
   match_date: string;
-
   home_team: string;
-
   away_team: string;
-
   home_score: number;
-
   away_score: number;
-
   home_odds:
     number | null;
-
   draw_odds:
     number | null;
-
   away_odds:
     number | null;
-
   status: string;
-
   source: string;
-
   updated_at: string;
 };
-
-/* ==========================================
-   CSV Parser
-========================================== */
 
 function parseCsvLine(
   line: string,
@@ -144,11 +127,6 @@ function parseCsvLine(
     if (
       char === '"'
     ) {
-      /*
-       * CSV 中：
-       * ""
-       * 代表欄位內容中的 "
-       */
       if (
         insideQuotes &&
         line[
@@ -193,10 +171,6 @@ function parseCsvLine(
   return values;
 }
 
-/* ==========================================
-   CSV → Object
-========================================== */
-
 function parseCsv(
   csv: string,
 ): CsvMatch[] {
@@ -210,7 +184,9 @@ function parseCsv(
         /\r?\n/,
       )
       .filter(
-        (line) =>
+        (
+          line,
+        ) =>
           line
             .trim()
             .length >
@@ -234,7 +210,9 @@ function parseCsv(
       1,
     )
     .map(
-      (line) => {
+      (
+        line,
+      ) => {
         const values =
           parseCsvLine(
             line,
@@ -266,14 +244,6 @@ function parseCsv(
     );
 }
 
-/* ==========================================
-   Score Parser
-
-   注意：
-   Number("") 會變 0，
-   所以不能直接拿來判斷比分。
-========================================== */
-
 function parseScore(
   value:
     string | undefined,
@@ -302,13 +272,6 @@ function parseScore(
 
   return parsed;
 }
-
-/* ==========================================
-   Odds Parser
-
-   正常足球 decimal odds
-   必須 > 1。
-========================================== */
 
 function parseOdds(
   value:
@@ -340,24 +303,6 @@ function parseOdds(
 
   return parsed;
 }
-
-/* ==========================================
-   取得歷史市場賠率
-
-   Priority：
-
-   1. Closing Average
-      AvgCH / AvgCD / AvgCA
-
-   2. Average
-      AvgH / AvgD / AvgA
-
-   3. Bet365 Closing
-      B365CH / B365CD / B365CA
-
-   4. Bet365
-      B365H / B365D / B365A
-========================================== */
 
 function getHistoricalOdds(
   match:
@@ -510,14 +455,6 @@ function getHistoricalOdds(
   };
 }
 
-/* ==========================================
-   Football-Data 日期
-
-   DD/MM/YYYY
-   →
-   ISO
-========================================== */
-
 function parseMatchDate(
   dateValue:
     string,
@@ -559,7 +496,8 @@ function parseMatchDate(
     100
   ) {
     year +=
-      year >= 70
+      year >=
+        70
         ? 1900
         : 2000;
   }
@@ -652,15 +590,43 @@ function parseMatchDate(
   return date;
 }
 
-/* ==========================================
-   External ID
-========================================== */
+function normalizeSlug(
+  value:
+    string,
+) {
+  return value
+    .normalize(
+      "NFD",
+    )
+    .replace(
+      /[\u0300-\u036f]/g,
+      "",
+    )
+    .toLowerCase()
+    .trim()
+    .replace(
+      /[^a-z0-9]+/g,
+      "-",
+    )
+    .replace(
+      /^-+|-+$/g,
+      "",
+    );
+}
 
 function createExternalId({
+  leagueCode,
+  seasonCode,
   date,
   homeTeam,
   awayTeam,
 }: {
+  leagueCode:
+    string;
+
+  seasonCode:
+    string;
+
   date:
     Date;
 
@@ -678,38 +644,14 @@ function createExternalId({
         10,
       );
 
-  const normalize =
-    (
-      value:
-        string,
-    ) =>
-      value
-        .normalize(
-          "NFD",
-        )
-        .replace(
-          /[\u0300-\u036f]/g,
-          "",
-        )
-        .toLowerCase()
-        .trim()
-        .replace(
-          /[^a-z0-9]+/g,
-          "-",
-        )
-        .replace(
-          /^-+|-+$/g,
-          "",
-        );
-
   return [
-    "SP1",
-    "2526",
+    leagueCode,
+    seasonCode,
     datePart,
-    normalize(
+    normalizeSlug(
       homeTeam,
     ),
-    normalize(
+    normalizeSlug(
       awayTeam,
     ),
   ].join(
@@ -717,11 +659,93 @@ function createExternalId({
   );
 }
 
-/* ==========================================
-   GET
+function getSeasonCode(
+  season:
+    string,
+) {
+  return season
+    .replace(
+      "/",
+      "",
+    )
+    .slice(
+      2,
+    );
+}
 
-   /api/football/sync/history-sync
-========================================== */
+async function upsertLeagueRows({
+  supabase,
+  league,
+  rows,
+}: {
+  /*
+   * 這支 route 沒有綁定 generated Database type。
+   * 若使用 ReturnType<typeof createClient>，
+   * TypeScript 可能把 table row 推成 never。
+   */
+  supabase:
+    any;
+
+  league:
+    string;
+
+  rows:
+    HistoryRow[];
+}) {
+  const BATCH_SIZE =
+    100;
+
+  let upserted =
+    0;
+
+  for (
+    let i =
+      0;
+    i <
+      rows.length;
+    i +=
+      BATCH_SIZE
+  ) {
+    const batch =
+      rows.slice(
+        i,
+        i +
+          BATCH_SIZE,
+      );
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          "football_match_history",
+        )
+        .upsert(
+          batch as any[],
+          {
+            onConflict:
+              "external_id",
+          },
+        );
+
+    if (
+      error
+    ) {
+      throw new Error(
+        `${league} upsert 失敗：${error.message}`,
+      );
+    }
+
+    upserted +=
+      batch.length;
+
+    console.log(
+      `✅ ${league} Upsert：${upserted}/${rows.length}`,
+    );
+  }
+
+  return upserted;
+}
 
 export async function GET() {
   try {
@@ -730,17 +754,16 @@ export async function GET() {
     );
 
     console.log(
-      "⚽ Football History + Odds Sync",
+      "⚽ FIVE LEAGUES HISTORY SYNC",
     );
 
     console.log(
-      `${LEAGUE} ${SEASON}`,
+      `📅 Season：${SEASON}`,
     );
 
-    /* ======================================
-       STEP 1
-       Supabase
-    ====================================== */
+    console.log(
+      "======================================",
+    );
 
     const supabaseUrl =
       process.env
@@ -786,382 +809,259 @@ export async function GET() {
         },
       );
 
-    /* ======================================
-       STEP 2
-       Download CSV
-    ====================================== */
-
-    console.log(
-      `🌐 Download：${CSV_URL}`,
-    );
-
-    const response =
-      await fetch(
-        CSV_URL,
-        {
-          cache:
-            "no-store",
-
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 XSI-Sports-AI",
-          },
-        },
+    const seasonCode =
+      getSeasonCode(
+        SEASON,
       );
 
-    if (
-      !response.ok
-    ) {
-      console.error(
-        `❌ CSV HTTP ${response.status}`,
-      );
-
-      return NextResponse.json(
-        {
-          success:
-            false,
-
-          message:
-            `Football-Data CSV HTTP ${response.status}`,
-        },
-        {
-          status:
-            502,
-        },
-      );
-    }
-
-    const csv =
-      await response.text();
-
-    console.log(
-      `📄 CSV Size：${csv.length}`,
-    );
-
-    /* ======================================
-       STEP 3
-       Parse CSV
-    ====================================== */
-
-    const matches =
-      parseCsv(
-        csv,
-      );
-
-    console.log(
-      `📊 CSV Rows：${matches.length}`,
-    );
-
-    /* ======================================
-       STEP 4
-       建立歷史資料
-    ====================================== */
-
-    const rows:
-      HistoryRow[] =
-      [];
-
-    let skipped =
-      0;
-
-    let oddsComplete =
-      0;
-
-    let oddsMissing =
-      0;
-
-    const oddsSourceCount:
-      Record<
-        string,
-        number
-      > = {};
+    const result:
+      Array<{
+        league: string;
+        code: string;
+        csvRows: number;
+        finishedMatches: number;
+        oddsComplete: number;
+        oddsMissing: number;
+        skipped: number;
+        upserted: number;
+      }> = [];
 
     for (
-      const match
-      of matches
+      const config
+      of LEAGUES
     ) {
-      const homeTeam =
-        match.HomeTeam
-          ?.trim();
+      console.log(
+        "--------------------------------------",
+      );
 
-      const awayTeam =
-        match.AwayTeam
-          ?.trim();
+      console.log(
+        `🌍 ${config.league} (${config.code})`,
+      );
 
-      const homeScore =
-        parseScore(
-          match.FTHG,
-        );
+      const csvUrl =
+        `https://www.football-data.co.uk/mmz4281/${seasonCode}/${config.code}.csv`;
 
-      const awayScore =
-        parseScore(
-          match.FTAG,
-        );
+      console.log(
+        `🌐 Download：${csvUrl}`,
+      );
 
-      const matchDate =
-        parseMatchDate(
-          match.Date,
-          match.Time,
-        );
+      const response =
+        await fetch(
+          csvUrl,
+          {
+            cache:
+              "no-store",
 
-      /*
-       * 未完賽 /
-       * 無比分 /
-       * 無隊名
-       * 都跳過。
-       */
-      if (
-        !homeTeam ||
-        !awayTeam ||
-        !matchDate ||
-        homeScore ===
-          null ||
-        awayScore ===
-          null
-      ) {
-        skipped +=
-          1;
-
-        continue;
-      }
-
-      const odds =
-        getHistoricalOdds(
-          match,
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 XSI-Sports-AI",
+            },
+          },
         );
 
       if (
-        odds.home !==
-          null &&
-        odds.draw !==
-          null &&
-        odds.away !==
-          null
+        !response.ok
       ) {
-        oddsComplete +=
-          1;
-      } else {
-        oddsMissing +=
-          1;
+        throw new Error(
+          `${config.league} CSV HTTP ${response.status}`,
+        );
       }
 
-      oddsSourceCount[
-        odds.source
-      ] =
-        (
-          oddsSourceCount[
-            odds.source
-          ] ??
-          0
-        ) +
-        1;
+      const csv =
+        await response.text();
 
-      rows.push({
-        external_id:
-          createExternalId({
-            date:
-              matchDate,
+      const matches =
+        parseCsv(
+          csv,
+        );
 
+      const rows:
+        HistoryRow[] =
+        [];
+
+      let skipped =
+        0;
+
+      let oddsComplete =
+        0;
+
+      let oddsMissing =
+        0;
+
+      for (
+        const match
+        of matches
+      ) {
+        const homeTeam =
+          match.HomeTeam
+            ?.trim();
+
+        const awayTeam =
+          match.AwayTeam
+            ?.trim();
+
+        const homeScore =
+          parseScore(
+            match.FTHG,
+          );
+
+        const awayScore =
+          parseScore(
+            match.FTAG,
+          );
+
+        const matchDate =
+          parseMatchDate(
+            match.Date,
+            match.Time,
+          );
+
+        if (
+          !homeTeam ||
+          !awayTeam ||
+          !matchDate ||
+          homeScore ===
+            null ||
+          awayScore ===
+            null
+        ) {
+          skipped +=
+            1;
+
+          continue;
+        }
+
+        const odds =
+          getHistoricalOdds(
+            match,
+          );
+
+        if (
+          odds.home !==
+            null &&
+          odds.draw !==
+            null &&
+          odds.away !==
+            null
+        ) {
+          oddsComplete +=
+            1;
+        } else {
+          oddsMissing +=
+            1;
+        }
+
+        rows.push({
+          external_id:
+            createExternalId({
+              leagueCode:
+                config.code,
+
+              seasonCode,
+
+              date:
+                matchDate,
+
+              homeTeam,
+
+              awayTeam,
+            }),
+
+          league:
+            config.league,
+
+          season:
+            SEASON,
+
+          match_date:
+            matchDate
+              .toISOString(),
+
+          home_team:
             homeTeam,
 
+          away_team:
             awayTeam,
-          }),
 
+          home_score:
+            homeScore,
+
+          away_score:
+            awayScore,
+
+          home_odds:
+            odds.home,
+
+          draw_odds:
+            odds.draw,
+
+          away_odds:
+            odds.away,
+
+          status:
+            "finished",
+
+          source:
+            SOURCE,
+
+          updated_at:
+            new Date()
+              .toISOString(),
+        });
+      }
+
+      const upserted =
+        await upsertLeagueRows({
+          supabase,
+          league:
+            config.league,
+          rows,
+        });
+
+      result.push({
         league:
-          LEAGUE,
+          config.league,
 
-        season:
-          SEASON,
-
-        match_date:
-          matchDate
-            .toISOString(),
-
-        home_team:
-          homeTeam,
-
-        away_team:
-          awayTeam,
-
-        home_score:
-          homeScore,
-
-        away_score:
-          awayScore,
-
-        home_odds:
-          odds.home,
-
-        draw_odds:
-          odds.draw,
-
-        away_odds:
-          odds.away,
-
-        status:
-          "finished",
-
-        source:
-          SOURCE,
-
-        updated_at:
-          new Date()
-            .toISOString(),
-      });
-    }
-
-    console.log(
-      `✅ Finished Matches：${rows.length}`,
-    );
-
-    console.log(
-      `💰 完整 1X2 賠率：${oddsComplete}`,
-    );
-
-    console.log(
-      `⚠️ 缺少 1X2 賠率：${oddsMissing}`,
-    );
-
-    console.log(
-      "Odds Sources：",
-      oddsSourceCount,
-    );
-
-    console.log(
-      `⏭️ Skipped：${skipped}`,
-    );
-
-    if (
-      rows.length ===
-      0
-    ) {
-      return NextResponse.json({
-        success:
-          false,
-
-        message:
-          "CSV 有下載成功，但沒有解析出任何已完賽資料",
+        code:
+          config.code,
 
         csvRows:
           matches.length,
 
+        finishedMatches:
+          rows.length,
+
+        oddsComplete,
+
+        oddsMissing,
+
         skipped,
+
+        upserted,
       });
+
+      console.log(
+        `🎉 ${config.league} 完成：${upserted} 場`,
+      );
     }
 
-    /* ======================================
-   STEP 5
-   依 日期 + 主隊 + 客隊
-   更新歷史賠率
-
-   不再依賴 external_id，
-   避免舊資料 ID 格式不同。
-====================================== */
-
-let synced = 0;
-let notFound = 0;
-
-for (const row of rows) {
-  const dateOnly =
-    row.match_date.slice(0, 10);
-
-  const startDate =
-    `${dateOnly}T00:00:00.000Z`;
-
-  const endDateObject =
-    new Date(startDate);
-
-  endDateObject.setUTCDate(
-    endDateObject.getUTCDate() + 1,
-  );
-
-  const endDate =
-    endDateObject.toISOString();
-
-  const {
-    data: updatedRows,
-    error,
-  } = await supabase
-    .from("football_match_history")
-    .update({
-      home_odds: row.home_odds,
-      draw_odds: row.draw_odds,
-      away_odds: row.away_odds,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("league", LEAGUE)
-    .eq("season", SEASON)
-    .eq("home_team", row.home_team)
-    .eq("away_team", row.away_team)
-    .gte("match_date", startDate)
-    .lt("match_date", endDate)
-    .select("id");
-
-  if (error) {
-    console.error(
-      "❌ Odds Update Error：",
-      row.home_team,
-      "vs",
-      row.away_team,
-      error,
-    );
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "歷史賠率更新失敗",
-        error: error.message,
-        synced,
-        notFound,
-      },
-      {
-        status: 500,
-      },
-    );
-  }
-
-  if (
-    !updatedRows ||
-    updatedRows.length === 0
-  ) {
-    notFound += 1;
-
-    console.log(
-      `⚠️ 找不到：${dateOnly} ${row.home_team} vs ${row.away_team}`,
-    );
-
-    continue;
-  }
-
-  synced += updatedRows.length;
-
-console.log(
-  `💰 Odds Updated：${synced}/${rows.length}｜${dateOnly} ${row.home_team} vs ${row.away_team}`,
-);
-}
-console.log(
-  `⚠️ Match Not Found：${notFound}`,
-);
-
-    /* ======================================
-       STEP 6
-       Complete
-    ====================================== */
+    const totalUpserted =
+      result.reduce(
+        (
+          sum,
+          item,
+        ) =>
+          sum +
+          item.upserted,
+        0,
+      );
 
     console.log(
       "======================================",
     );
 
     console.log(
-      `🎉 ${LEAGUE} ${SEASON} 歷史賽果 + 賠率同步完成`,
-    );
-
-    console.log(
-      `⚽ Matches：${synced}`,
-    );
-
-    console.log(
-      `💰 Odds Complete：${oddsComplete}`,
+      `🏁 FIVE LEAGUES COMPLETE：${totalUpserted}`,
     );
 
     console.log(
@@ -1172,68 +1072,19 @@ console.log(
       success:
         true,
 
-      league:
-        LEAGUE,
-
       season:
         SEASON,
 
-      csvRows:
-        matches.length,
+      totalUpserted,
 
-      finishedMatches:
-        rows.length,
-
-      synced,
-
-      skipped,
-
-      odds: {
-        complete:
-          oddsComplete,
-
-        missing:
-          oddsMissing,
-
-        sources:
-          oddsSourceCount,
-      },
-
-      sample:
-        rows
-          .slice(
-            -5,
-          )
-          .map(
-            (row) => ({
-              date:
-                row.match_date,
-
-              homeTeam:
-                row.home_team,
-
-              awayTeam:
-                row.away_team,
-
-              score:
-                `${row.home_score}-${row.away_score}`,
-
-              odds: {
-                home:
-                  row.home_odds,
-
-                draw:
-                  row.draw_odds,
-
-                away:
-                  row.away_odds,
-              },
-            }),
-          ),
+      leagues:
+        result,
     });
-  } catch (error) {
+  } catch (
+    error
+  ) {
     console.error(
-      "❌ Football History Sync Error：",
+      "❌ Five Leagues History Sync Error：",
       error,
     );
 
@@ -1251,7 +1102,7 @@ console.log(
               ),
       },
       {
-        status:
+          status:
           500,
       },
     );

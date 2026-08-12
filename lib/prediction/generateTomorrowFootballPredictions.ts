@@ -23,6 +23,17 @@ type GenerateOptions = {
   force?: boolean;
 };
 
+type TotalsPassDiagnostics = {
+  missingKickoff: number;
+  missingLeagueHistory: number;
+  insufficientHistory: number;
+  insufficientHomeSamples: number;
+  insufficientAwaySamples: number;
+  insufficientLeagueSamples: number;
+  probabilityBelowThreshold: number;
+  other: number;
+};
+
 type BatchFootballPredictionResult = {
   scheduleCount: number;
 
@@ -41,6 +52,9 @@ type BatchFootballPredictionResult = {
   totalsQualified: number;
 
   totalsPassed: number;
+
+  totalsPassDiagnostics:
+    TotalsPassDiagnostics;
 
   historyCount: number;
 
@@ -64,6 +78,11 @@ type UnknownRecord =
     string,
     unknown
   >;
+
+type FootballHistoryRow =
+  FootballHistoryMatch & {
+    league: string;
+  };
 
 /* ==========================================
    Helpers
@@ -197,7 +216,7 @@ async function loadAllFootballHistory(
     0;
 
   const history:
-    FootballHistoryMatch[] =
+    FootballHistoryRow[] =
     [];
 
   while (
@@ -218,6 +237,7 @@ async function loadAllFootballHistory(
         )
         .select(
           [
+            "league",
             "match_date",
             "home_team",
             "away_team",
@@ -226,10 +246,6 @@ async function loadAllFootballHistory(
           ].join(
             ",",
           ),
-        )
-        .eq(
-          "league",
-          "西甲",
         )
         .eq(
           "status",
@@ -259,7 +275,7 @@ async function loadAllFootballHistory(
       (
         data ??
         []
-      ) as unknown as FootballHistoryMatch[];
+      ) as unknown as FootballHistoryRow[];
 
     history.push(
       ...rows,
@@ -277,6 +293,64 @@ async function loadAllFootballHistory(
   }
 
   return history;
+}
+
+function groupHistoryByLeague(
+  history:
+    FootballHistoryRow[],
+) {
+  const map =
+    new Map<
+      string,
+      FootballHistoryMatch[]
+    >();
+
+  for (
+    const row
+    of history
+  ) {
+    const league =
+      String(
+        row.league ??
+        "",
+      ).trim();
+
+    if (
+      !league
+    ) {
+      continue;
+    }
+
+    const existing =
+      map.get(
+        league,
+      ) ??
+      [];
+
+    existing.push({
+      match_date:
+        row.match_date,
+
+      home_team:
+        row.home_team,
+
+      away_team:
+        row.away_team,
+
+      home_score:
+        row.home_score,
+
+      away_score:
+        row.away_score,
+    });
+
+    map.set(
+      league,
+      existing,
+    );
+  }
+
+  return map;
 }
 
 /* ==========================================
@@ -321,6 +395,17 @@ export async function generateTomorrowFootballPredictions(
     totalsPassed:
       0,
 
+    totalsPassDiagnostics: {
+      missingKickoff: 0,
+      missingLeagueHistory: 0,
+      insufficientHistory: 0,
+      insufficientHomeSamples: 0,
+      insufficientAwaySamples: 0,
+      insufficientLeagueSamples: 0,
+      probabilityBelowThreshold: 0,
+      other: 0,
+    },
+
     historyCount:
       0,
 
@@ -329,6 +414,79 @@ export async function generateTomorrowFootballPredictions(
     errors:
       [],
   };
+
+  /*
+   * Totals Missing Team Summary
+   * key = team name
+   * value = 最低樣本數 + 出現次數
+   */
+  const missingHomeTeams =
+    new Map<
+      string,
+      {
+        samples: number;
+        occurrences: number;
+      }
+    >();
+
+  const missingAwayTeams =
+    new Map<
+      string,
+      {
+        samples: number;
+        occurrences: number;
+      }
+    >();
+
+  function recordMissingTeam(
+    map:
+      Map<
+        string,
+        {
+          samples: number;
+          occurrences: number;
+        }
+      >,
+    team:
+      string,
+    samples:
+      number,
+  ) {
+    const current =
+      map.get(
+        team,
+      );
+
+    if (
+      current
+    ) {
+      map.set(
+        team,
+        {
+          samples:
+            Math.min(
+              current.samples,
+              samples,
+            ),
+
+          occurrences:
+            current.occurrences +
+            1,
+        },
+      );
+
+      return;
+    }
+
+    map.set(
+      team,
+      {
+        samples,
+        occurrences:
+          1,
+      },
+    );
+  }
 
   /* ==========================================
      STEP 1
@@ -381,6 +539,30 @@ export async function generateTomorrowFootballPredictions(
 
   console.log(
     `📚 football_match_history：${footballHistory.length} 場`,
+  );
+
+  const footballHistoryByLeague =
+    groupHistoryByLeague(
+      footballHistory,
+    );
+
+  console.log(
+    "📚 History by League：",
+    Object.fromEntries(
+      Array.from(
+        footballHistoryByLeague.entries(),
+      ).map(
+        (
+          [
+            league,
+            rows,
+          ],
+        ) => [
+          league,
+          rows.length,
+        ],
+      ),
+    ),
   );
 
   /* ==========================================
@@ -601,19 +783,67 @@ export async function generateTomorrowFootballPredictions(
       if (
         kickoff
       ) {
-        const totals =
-          calculateFootballTotalsPrediction({
-            homeTeam:
-              game.homeTeam,
+        const gameLeague =
+          String(
+            game.leagueShortName ??
+            "",
+          ).trim();
 
-            awayTeam:
-              game.awayTeam,
+        const leagueHistory =
+          footballHistoryByLeague.get(
+            gameLeague,
+          ) ??
+          [];
 
-            kickoff,
+        if (
+          leagueHistory.length ===
+          0
+        ) {
+          summary.totalsPassed +=
+            1;
 
-            history:
-              footballHistory,
-          });
+          summary
+            .totalsPassDiagnostics
+            .missingLeagueHistory +=
+            1;
+
+          console.log(
+            `⏭️ Totals：PASS｜${gameLeague || "未知聯賽"} 沒有歷史資料`,
+          );
+        } else {
+          const totals =
+            calculateFootballTotalsPrediction({
+              homeTeam:
+                game.homeTeam,
+
+              awayTeam:
+                game.awayTeam,
+
+              kickoff,
+
+              /*
+               * History V2
+               *
+               * teamHistory：
+               * 使用所有已同步歷史資料，
+               * 讓球隊可跨賽事累積主 / 客場樣本。
+               *
+               * leagueHistory：
+               * 只使用目前聯賽，
+               * 保留該聯賽自己的平均進球基準。
+               *
+               * history：
+               * 保留舊參數相容性。
+               */
+              history:
+                leagueHistory,
+
+              teamHistory:
+                footballHistory,
+
+              leagueHistory:
+                leagueHistory,
+            });
 
         if (
           totals.qualified
@@ -674,6 +904,92 @@ export async function generateTomorrowFootballPredictions(
           summary.totalsPassed +=
             1;
 
+          const hasInsufficientHistory =
+            totals.reasons.some(
+              (reason) =>
+                reason.includes(
+                  "歷史樣本不足",
+                ),
+            );
+
+          if (
+            hasInsufficientHistory
+          ) {
+            summary
+              .totalsPassDiagnostics
+              .insufficientHistory +=
+              1;
+
+            if (
+              totals.sample.homeMatches <
+              4
+            ) {
+              recordMissingTeam(
+                missingHomeTeams,
+                game.homeTeam,
+                totals.sample.homeMatches,
+              );
+            }
+
+            if (
+              totals.sample.awayMatches <
+              4
+            ) {
+              recordMissingTeam(
+                missingAwayTeams,
+                game.awayTeam,
+                totals.sample.awayMatches,
+              );
+            }
+
+            if (
+              totals.sample.homeMatches <
+              4
+            ) {
+              summary
+                .totalsPassDiagnostics
+                .insufficientHomeSamples +=
+                1;
+            }
+
+            if (
+              totals.sample.awayMatches <
+              4
+            ) {
+              summary
+                .totalsPassDiagnostics
+                .insufficientAwaySamples +=
+                1;
+            }
+
+            if (
+              totals.sample.leagueMatches <
+              20
+            ) {
+              summary
+                .totalsPassDiagnostics
+                .insufficientLeagueSamples +=
+                1;
+            }
+          } else if (
+            totals.reasons.some(
+              (reason) =>
+                reason.includes(
+                  "大小球訊號未達出手門檻",
+                ),
+            )
+          ) {
+            summary
+              .totalsPassDiagnostics
+              .probabilityBelowThreshold +=
+              1;
+          } else {
+            summary
+              .totalsPassDiagnostics
+              .other +=
+              1;
+          }
+
           console.log(
             "⏭️ Totals：PASS",
           );
@@ -681,9 +997,69 @@ export async function generateTomorrowFootballPredictions(
           console.log(
             `📈 Expected Total：${totals.expectedTotal}`,
           );
+
+          console.log(
+            `🧪 PASS Reasons：${totals.reasons.join(
+              "｜",
+            )}`,
+          );
+
+          if (
+            hasInsufficientHistory
+          ) {
+            console.log(
+              "🔎 TOTALS TEAM NAME DIAGNOSTIC",
+            );
+
+            console.log(
+              `🏠 主隊：${totals.nameDiagnostics.home.requestedName}`,
+            );
+
+            console.log(
+              `   主場樣本：${totals.sample.homeMatches}`,
+            );
+
+            console.log(
+              `   正規化：${totals.nameDiagnostics.home.normalizedRequestedName}`,
+            );
+
+            console.log(
+              `   可能歷史名稱：${
+                totals.nameDiagnostics.home.candidateNames.length > 0
+                  ? totals.nameDiagnostics.home.candidateNames.join("｜")
+                  : "無"
+              }`,
+            );
+
+            console.log(
+              `✈️ 客隊：${totals.nameDiagnostics.away.requestedName}`,
+            );
+
+            console.log(
+              `   客場樣本：${totals.sample.awayMatches}`,
+            );
+
+            console.log(
+              `   正規化：${totals.nameDiagnostics.away.normalizedRequestedName}`,
+            );
+
+            console.log(
+              `   可能歷史名稱：${
+                totals.nameDiagnostics.away.candidateNames.length > 0
+                  ? totals.nameDiagnostics.away.candidateNames.join("｜")
+                  : "無"
+              }`,
+            );
+          }
+        }
         }
       } else {
         summary.totalsPassed +=
+          1;
+
+        summary
+          .totalsPassDiagnostics
+          .missingKickoff +=
           1;
 
         console.warn(
@@ -926,8 +1302,155 @@ export async function generateTomorrowFootballPredictions(
   );
 
   console.log(
+    "======================================",
+  );
+
+  console.log(
+    "🧪 TOTALS V6 PASS DIAGNOSTICS",
+  );
+
+  console.log(
+    `找不到 kickoff：${summary.totalsPassDiagnostics.missingKickoff}`,
+  );
+
+  console.log(
+    `聯賽沒有歷史資料：${summary.totalsPassDiagnostics.missingLeagueHistory}`,
+  );
+
+  console.log(
+    `歷史樣本不足：${summary.totalsPassDiagnostics.insufficientHistory}`,
+  );
+
+  console.log(
+    `├─ 主隊主場 < 4：${summary.totalsPassDiagnostics.insufficientHomeSamples}`,
+  );
+
+  console.log(
+    `├─ 客隊客場 < 4：${summary.totalsPassDiagnostics.insufficientAwaySamples}`,
+  );
+
+  console.log(
+    `└─ 聯盟歷史 < 20：${summary.totalsPassDiagnostics.insufficientLeagueSamples}`,
+  );
+
+  console.log(
+    `機率未達門檻：${summary.totalsPassDiagnostics.probabilityBelowThreshold}`,
+  );
+
+  console.log(
+    `其他：${summary.totalsPassDiagnostics.other}`,
+  );
+
+  console.log(
+    "======================================",
+  );
+
+  console.log(
     `失敗：${summary.failed}`,
   );
+
+  console.log(
+    "======================================",
+  );
+
+
+  console.log(
+    "======================================",
+  );
+
+  console.log(
+    "⚠️ TOTALS MISSING TEAM SUMMARY",
+  );
+
+  console.log(
+    "======================================",
+  );
+
+  const sortedMissingHomeTeams =
+    Array.from(
+      missingHomeTeams.entries(),
+    ).sort(
+      (
+        a,
+        b,
+      ) =>
+        a[1].samples -
+          b[1].samples ||
+        b[1].occurrences -
+          a[1].occurrences ||
+        a[0].localeCompare(
+          b[0],
+        ),
+    );
+
+  const sortedMissingAwayTeams =
+    Array.from(
+      missingAwayTeams.entries(),
+    ).sort(
+      (
+        a,
+        b,
+      ) =>
+        a[1].samples -
+          b[1].samples ||
+        b[1].occurrences -
+          a[1].occurrences ||
+        a[0].localeCompare(
+          b[0],
+        ),
+    );
+
+  console.log(
+    `🏠 主隊不足：${sortedMissingHomeTeams.length} 隊`,
+  );
+
+  if (
+    sortedMissingHomeTeams.length ===
+    0
+  ) {
+    console.log(
+      "  無",
+    );
+  } else {
+    for (
+      const [
+        team,
+        info,
+      ] of sortedMissingHomeTeams
+    ) {
+      console.log(
+        `  ${team}｜主場樣本 ${info.samples}｜出現 ${info.occurrences} 次`,
+      );
+    }
+  }
+
+  console.log(
+    "--------------------------------------",
+  );
+
+  console.log(
+    `✈️ 客隊不足：${sortedMissingAwayTeams.length} 隊`,
+  );
+
+  if (
+    sortedMissingAwayTeams.length ===
+    0
+  ) {
+    console.log(
+      "  無",
+    );
+  } else {
+    for (
+      const [
+        team,
+        info,
+      ] of sortedMissingAwayTeams
+    ) {
+      console.log(
+        `  ${team}｜客場樣本 ${info.samples}｜出現 ${info.occurrences} 次`,
+      );
+    }
+  }
 
   console.log(
     "======================================",

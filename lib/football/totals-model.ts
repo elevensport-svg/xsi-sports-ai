@@ -1,3 +1,7 @@
+import {
+  getFootballHistoryTeamName,
+} from "./team-aliases";
+
 /* ==========================================
    XSI Football Totals Model
 
@@ -64,6 +68,14 @@ export type FootballTotalsInput = {
 
   history:
     FootballHistoryMatch[];
+
+  // History V2：球隊跨賽事主/客場樣本
+  teamHistory?:
+    FootballHistoryMatch[];
+
+  // History V2：當前聯賽基準樣本
+  leagueHistory?:
+    FootballHistoryMatch[];
 };
 
 export type FootballTotalsTeamStats = {
@@ -86,6 +98,13 @@ export type FootballTotalsLeagueStats = {
   averageAwayGoals: number;
 
   averageTotalGoals: number;
+};
+
+export type FootballTotalsNameDiagnostic = {
+  requestedName: string;
+  normalizedRequestedName: string;
+  exactVenueMatches: number;
+  candidateNames: string[];
 };
 
 export type FootballTotalsPrediction = {
@@ -141,6 +160,14 @@ export type FootballTotalsPrediction = {
 
   reasons:
     string[];
+
+  nameDiagnostics: {
+    home:
+      FootballTotalsNameDiagnostic;
+
+    away:
+      FootballTotalsNameDiagnostic;
+  };
 };
 
 /* ==========================================
@@ -171,7 +198,12 @@ function normalizeTeamName(
   value:
     string,
 ) {
-  return value
+  const aliasedValue =
+    getFootballHistoryTeamName(
+      value,
+    );
+
+  return aliasedValue
     .normalize(
       "NFD",
     )
@@ -185,6 +217,201 @@ function normalizeTeamName(
       /[^a-z0-9]/g,
       "",
     );
+}
+
+function getNameDiagnostic({
+  teamName,
+  history,
+  venue,
+}: {
+  teamName:
+    string;
+
+  history:
+    FootballHistoryMatch[];
+
+  venue:
+    "home" | "away";
+}): FootballTotalsNameDiagnostic {
+  const requestedKey =
+    normalizeTeamName(
+      teamName,
+    );
+
+  const counts =
+    new Map<
+      string,
+      number
+    >();
+
+  for (
+    const match
+    of history
+  ) {
+    const historicalName =
+      venue ===
+        "home"
+        ? match.home_team
+        : match.away_team;
+
+    const key =
+      normalizeTeamName(
+        historicalName,
+      );
+
+    counts.set(
+      historicalName,
+      (
+        counts.get(
+          historicalName,
+        ) ??
+        0
+      ) +
+        1,
+    );
+
+    if (
+      key ===
+      requestedKey
+    ) {
+      continue;
+    }
+  }
+
+  const exactVenueMatches =
+    Array.from(
+      counts.entries(),
+    )
+      .filter(
+        (
+          [
+            name,
+          ],
+        ) =>
+          normalizeTeamName(
+            name,
+          ) ===
+          requestedKey,
+      )
+      .reduce(
+        (
+          sum,
+          [
+            ,
+            count,
+          ],
+        ) =>
+          sum +
+          count,
+        0,
+      );
+
+  const candidateNames =
+    Array.from(
+      counts.entries(),
+    )
+      .map(
+        (
+          [
+            name,
+            count,
+          ],
+        ) => {
+          const candidateKey =
+            normalizeTeamName(
+              name,
+            );
+
+          let score =
+            0;
+
+          if (
+            requestedKey.includes(
+              candidateKey,
+            ) ||
+            candidateKey.includes(
+              requestedKey,
+            )
+          ) {
+            score +=
+              100;
+          }
+
+          const requestedTokens =
+            teamName
+              .toLowerCase()
+              .split(
+                /[^a-z0-9]+/,
+              )
+              .filter(
+                (
+                  token,
+                ) =>
+                  token.length >=
+                  3,
+              );
+
+          const candidateLower =
+            name
+              .toLowerCase();
+
+          score +=
+            requestedTokens.filter(
+              (
+                token,
+              ) =>
+                candidateLower.includes(
+                  token,
+                ),
+            ).length *
+            10;
+
+          return {
+            name,
+            count,
+            score,
+          };
+        },
+      )
+      .filter(
+        (
+          item,
+        ) =>
+          item.score >
+          0,
+      )
+      .sort(
+        (
+          a,
+          b,
+        ) =>
+          b.score -
+            a.score ||
+          b.count -
+            a.count,
+      )
+      .slice(
+        0,
+        5,
+      )
+      .map(
+        (
+          item,
+        ) =>
+          `${item.name} (${item.count})`,
+      );
+
+  return {
+    requestedName:
+      teamName,
+
+    normalizedRequestedName:
+      requestedKey,
+
+    exactVenueMatches,
+
+    candidateNames,
+  };
 }
 
 function toTime(
@@ -429,6 +656,8 @@ export function calculateFootballTotalsPrediction({
   awayTeam,
   kickoff,
   history,
+  teamHistory,
+  leagueHistory,
 }: FootballTotalsInput): FootballTotalsPrediction {
   const kickoffTime =
     toTime(
@@ -439,8 +668,20 @@ export function calculateFootballTotalsPrediction({
    * 正式預測非常重要：
    * 只允許使用 kickoff 以前的比賽。
    */
-  const usableHistory =
-    history
+  const rawTeamHistory =
+    teamHistory ??
+    history;
+
+  const rawLeagueHistory =
+    leagueHistory ??
+    history;
+
+  /*
+   * 正式預測非常重要：
+   * 只允許使用 kickoff 以前的比賽。
+   */
+  const usableTeamHistory =
+    rawTeamHistory
       .filter(
         (
           match,
@@ -465,12 +706,69 @@ export function calculateFootballTotalsPrediction({
           b,
         ) =>
           toTime(
-            a.match_date,
+            b.match_date,
           ) -
           toTime(
-            b.match_date,
+            a.match_date,
           ),
       );
+
+  const usableLeagueHistory =
+    rawLeagueHistory
+      .filter(
+        (
+          match,
+        ) => {
+          const time =
+            toTime(
+              match.match_date,
+            );
+
+          return (
+            Number.isFinite(
+              time,
+            ) &&
+            time <
+              kickoffTime
+          );
+        },
+      )
+      .sort(
+        (
+          a,
+          b,
+        ) =>
+          toTime(
+            b.match_date,
+          ) -
+          toTime(
+            a.match_date,
+          ),
+      );
+
+  const homeNameDiagnostic =
+    getNameDiagnostic({
+      teamName:
+        homeTeam,
+
+      history:
+        usableTeamHistory,
+
+      venue:
+        "home",
+    });
+
+  const awayNameDiagnostic =
+    getNameDiagnostic({
+      teamName:
+        awayTeam,
+
+      history:
+        usableTeamHistory,
+
+      venue:
+        "away",
+    });
 
   const homeStats =
     calculateTeamVenueStats({
@@ -478,7 +776,7 @@ export function calculateFootballTotalsPrediction({
         homeTeam,
 
       history:
-        usableHistory,
+        usableTeamHistory,
 
       venue:
         "home",
@@ -490,7 +788,7 @@ export function calculateFootballTotalsPrediction({
         awayTeam,
 
       history:
-        usableHistory,
+        usableTeamHistory,
 
       venue:
         "away",
@@ -498,7 +796,7 @@ export function calculateFootballTotalsPrediction({
 
   const leagueStats =
     calculateLeagueStats(
-      usableHistory,
+      usableLeagueHistory,
     );
 
   /* ======================================
@@ -564,6 +862,14 @@ export function calculateFootballTotalsPrediction({
 
         leagueMatches:
           leagueStats.matches,
+      },
+
+      nameDiagnostics: {
+        home:
+          homeNameDiagnostic,
+
+        away:
+          awayNameDiagnostic,
       },
 
       reasons: [
@@ -875,6 +1181,14 @@ export function calculateFootballTotalsPrediction({
 
       leagueMatches:
         leagueStats.matches,
+    },
+
+    nameDiagnostics: {
+      home:
+        homeNameDiagnostic,
+
+      away:
+        awayNameDiagnostic,
     },
 
     reasons,
