@@ -1,54 +1,3 @@
-export function getMlbDisplayDate(): Date {
-  const now = new Date();
-
-  const taiwanDate =
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Taipei",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(now);
-
-  const taiwanHour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Taipei",
-      hour: "2-digit",
-      hour12: false,
-    }).format(now),
-  );
-
-  const displayDate =
-    new Date(`${taiwanDate}T00:00:00+08:00`);
-
-  // 台灣時間下午 3 點後切換成隔日
-  if (taiwanHour >= 15) {
-    displayDate.setDate(
-      displayDate.getDate() + 1,
-    );
-  }
-
-  return displayDate;
-}
-
-export function isMlbTomorrowSchedule(): boolean {
-  const now = new Date();
-
-  const taiwanHour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Taipei",
-      hour: "2-digit",
-      hour12: false,
-    }).format(now),
-  );
-
-  return taiwanHour >= 15;
-}
-
-export async function getCurrentMlbSchedule(): Promise<MlbScheduleGame[]> {
-  return getMlbGamesByTaiwanDate(
-    getMlbDisplayDate(),
-  );
-}
 export type MlbTeamReference = {
   id: number;
   name: string;
@@ -95,52 +44,11 @@ type MlbScheduleResponse = {
   }>;
 };
 
-type MlbGameResponse = {
-  gamePk?: number;
-  gameDate?: string;
-  officialDate?: string;
-
-  status?: {
-    abstractGameState?: string;
-    detailedState?: string;
-  };
-
-  teams?: {
-    away?: {
-      team?: MlbTeamReference;
-      probablePitcher?: MlbPitcher;
-    };
-
-    home?: {
-      team?: MlbTeamReference;
-      probablePitcher?: MlbPitcher;
-    };
-  };
-
-  venue?: {
-    id: number;
-    name: string;
-  };
-};
-
-function formatDateForApi(
-  date: Date,
-): string {
-  const year =
-    date.getFullYear();
-
-  const month =
-    String(
-      date.getMonth() + 1,
-    ).padStart(2, "0");
-
-  const day =
-    String(
-      date.getDate(),
-    ).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
+/*
+ * ==========================================
+ * Taiwan Date Helpers
+ * ==========================================
+ */
 
 export function getTaiwanDateString(
   date: Date,
@@ -148,8 +56,7 @@ export function getTaiwanDateString(
   return new Intl.DateTimeFormat(
     "en-CA",
     {
-      timeZone:
-        "Asia/Taipei",
+      timeZone: "Asia/Taipei",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -157,6 +64,141 @@ export function getTaiwanDateString(
   ).format(date);
 }
 
+function getTaiwanHour(
+  date: Date = new Date(),
+): number {
+  return Number(
+    new Intl.DateTimeFormat(
+      "en-US",
+      {
+        timeZone: "Asia/Taipei",
+        hour: "2-digit",
+        hour12: false,
+      },
+    ).format(date),
+  );
+}
+
+/*
+ * ==========================================
+ * yyyy-mm-dd + days
+ *
+ * 完全使用 UTC 做純日期運算，
+ * 避免 Vercel / Windows timezone 不一致
+ * ==========================================
+ */
+function addDaysToDateString(
+  dateString: string,
+  days: number,
+): string {
+  const [
+    year,
+    month,
+    day,
+  ] = dateString
+    .split("-")
+    .map(Number);
+
+  const date =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day,
+      ),
+    );
+
+  date.setUTCDate(
+    date.getUTCDate() +
+      days,
+  );
+
+  return [
+    date.getUTCFullYear(),
+    String(
+      date.getUTCMonth() +
+        1,
+    ).padStart(
+      2,
+      "0",
+    ),
+    String(
+      date.getUTCDate(),
+    ).padStart(
+      2,
+      "0",
+    ),
+  ].join("-");
+}
+
+/*
+ * ==========================================
+ * MLB 首頁顯示日期
+ *
+ * 台灣時間：
+ * 00:00 ~ 14:59 → 今天
+ * 15:00 ~ 23:59 → 明天
+ * ==========================================
+ */
+export function getMlbDisplayDate(): Date {
+  const now =
+    new Date();
+
+  const taiwanToday =
+    getTaiwanDateString(
+      now,
+    );
+
+  const taiwanHour =
+    getTaiwanHour(now);
+
+  const targetDateText =
+    taiwanHour >= 15
+      ? addDaysToDateString(
+          taiwanToday,
+          1,
+        )
+      : taiwanToday;
+
+  return new Date(
+    `${targetDateText}T12:00:00+08:00`,
+  );
+}
+
+export function isMlbTomorrowSchedule(): boolean {
+  return (
+    getTaiwanHour() >=
+    15
+  );
+}
+
+/*
+ * ==========================================
+ * 台灣明天
+ * ==========================================
+ */
+export function getTaiwanTomorrow(): Date {
+  const taiwanToday =
+    getTaiwanDateString(
+      new Date(),
+    );
+
+  const tomorrowText =
+    addDaysToDateString(
+      taiwanToday,
+      1,
+    );
+
+  return new Date(
+    `${tomorrowText}T12:00:00+08:00`,
+  );
+}
+
+/*
+ * ==========================================
+ * MLB 時間顯示
+ * ==========================================
+ */
 export function formatTaiwanGameTime(
   gameDate: string,
 ): string {
@@ -177,24 +219,11 @@ export function formatTaiwanGameTime(
   );
 }
 
-export function getTaiwanTomorrow(): Date {
-  const taiwanToday =
-    getTaiwanDateString(
-      new Date(),
-    );
-
-  const tomorrow =
-    new Date(
-      `${taiwanToday}T00:00:00+08:00`,
-    );
-
-  tomorrow.setDate(
-    tomorrow.getDate() + 1,
-  );
-
-  return tomorrow;
-}
-
+/*
+ * ==========================================
+ * 依台灣日期取得 MLB 賽程
+ * ==========================================
+ */
 export async function getMlbGamesByTaiwanDate(
   targetDate: Date,
 ): Promise<MlbScheduleGame[]> {
@@ -203,33 +232,31 @@ export async function getMlbGamesByTaiwanDate(
       targetDate,
     );
 
+  /*
+   * MLB API 的日期主要依美國官方日期。
+   *
+   * 台灣日期可能跨到前一個美國日期，
+   * 所以一次抓前後各一天。
+   */
   const startDate =
-    new Date(targetDate);
-
-  startDate.setDate(
-    startDate.getDate() - 1,
-  );
+    addDaysToDateString(
+      targetDateText,
+      -1,
+    );
 
   const endDate =
-    new Date(targetDate);
-
-  endDate.setDate(
-    endDate.getDate() + 1,
-  );
+    addDaysToDateString(
+      targetDateText,
+      1,
+    );
 
   const params =
     new URLSearchParams({
       sportId: "1",
 
-      startDate:
-        formatDateForApi(
-          startDate,
-        ),
+      startDate,
 
-      endDate:
-        formatDateForApi(
-          endDate,
-        ),
+      endDate,
 
       hydrate:
         "probablePitcher,team,venue",
@@ -239,17 +266,33 @@ export async function getMlbGamesByTaiwanDate(
     `https://statsapi.mlb.com/api/v1/schedule?${params.toString()}`;
 
   try {
+    console.log(
+      "======================================",
+    );
+
+    console.log(
+      "⚾ MLB Schedule Query",
+    );
+
+    console.log(
+      `台灣目標日期：${targetDateText}`,
+    );
+
+    console.log(
+      `MLB API 查詢：${startDate} ~ ${endDate}`,
+    );
+
     const response =
       await fetch(
         url,
         {
-          next: {
-            revalidate: 300,
-          },
+          cache: "no-store",
         },
       );
 
-    if (!response.ok) {
+    if (
+      !response.ok
+    ) {
       throw new Error(
         `MLB API 錯誤：${response.status}`,
       );
@@ -261,21 +304,45 @@ export async function getMlbGamesByTaiwanDate(
     const allGames =
       data.dates?.flatMap(
         (date) =>
-          date.games,
+          date.games ?? [],
       ) ?? [];
 
-    return allGames.filter(
-      (game) => {
-        return (
-          getTaiwanDateString(
-            new Date(
-              game.gameDate,
-            ),
-          ) ===
-          targetDateText
-        );
-      },
+    console.log(
+      `MLB API 原始場數：${allGames.length}`,
     );
+
+    const filteredGames =
+      allGames.filter(
+        (game) => {
+          if (
+            !game.gameDate
+          ) {
+            return false;
+          }
+
+          const gameTaiwanDate =
+            getTaiwanDateString(
+              new Date(
+                game.gameDate,
+              ),
+            );
+
+          return (
+            gameTaiwanDate ===
+            targetDateText
+          );
+        },
+      );
+
+    console.log(
+      `台灣 ${targetDateText} 賽事：${filteredGames.length}`,
+    );
+
+    console.log(
+      "======================================",
+    );
+
+    return filteredGames;
   } catch (error) {
     console.error(
       "取得 MLB 賽程失敗：",
@@ -286,18 +353,46 @@ export async function getMlbGamesByTaiwanDate(
   }
 }
 
+/*
+ * ==========================================
+ * 取得目前 MLB 顯示日
+ * ==========================================
+ */
+export async function getCurrentMlbSchedule(): Promise<MlbScheduleGame[]> {
+  const displayDate =
+    getMlbDisplayDate();
+
+  console.log(
+    `⚾ MLB 顯示日期：${getTaiwanDateString(
+      displayDate,
+    )}`,
+  );
+
+  return getMlbGamesByTaiwanDate(
+    displayDate,
+  );
+}
+
+/*
+ * ==========================================
+ * 明日 MLB
+ * ==========================================
+ */
 export async function getTomorrowMlbGames(): Promise<MlbScheduleGame[]> {
   return getMlbGamesByTaiwanDate(
     getTaiwanTomorrow(),
   );
 }
 
-/* ==========================================
-   直接用 Game PK 取得單場 MLB 賽事
-========================================== */
-
+/*
+ * ==========================================
+ * 直接用 Game PK 取得單場 MLB 賽事
+ * ==========================================
+ */
 export async function getMlbGameByPk(
-  gamePk: string | number,
+  gamePk:
+    | string
+    | number,
 ): Promise<MlbScheduleGame | null> {
   const url =
     `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
@@ -307,13 +402,13 @@ export async function getMlbGameByPk(
       await fetch(
         url,
         {
-          next: {
-            revalidate: 300,
-          },
+          cache: "no-store",
         },
       );
 
-    if (!response.ok) {
+    if (
+      !response.ok
+    ) {
       console.error(
         "MLB Game API 錯誤：",
         response.status,
@@ -348,7 +443,8 @@ export async function getMlbGameByPk(
       {
         gamePk:
           Number(
-            gameData.game.pk ??
+            gameData.game
+              .pk ??
               gamePk,
           ),
 

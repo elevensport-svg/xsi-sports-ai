@@ -1,3 +1,6 @@
+import {
+  getCurrentMlbSchedule,
+} from "../../../lib/api/mlb";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -559,30 +562,105 @@ export default async function ParlayPage() {
   }
 
   const histories =
-    (data ??
-      []) as PredictionHistory[];
+  (data ??
+    []) as PredictionHistory[];
 
-  /*
-   * ==========================================
-   * 有效 Pick
-   * ==========================================
-   */
-  const availablePicks =
-    histories
-      .filter(
-        isValidPrediction,
-      )
-      .map(
-        toParlayPick,
-      )
-      .sort(
-        (
-          a,
-          b,
-        ) =>
-          b.confidence -
-          a.confidence,
-      );
+/*
+ * ==========================================
+ * 取得目前 MLB 顯示日賽程
+ *
+ * 只允許目前畫面真正存在的 MLB gamePk
+ * 舊 pending MLB 不再進串關。
+ * ==========================================
+ */
+let currentMlbGamePks =
+  new Set<string>();
+
+try {
+  const currentMlbGames =
+    await getCurrentMlbSchedule();
+
+  currentMlbGamePks =
+    new Set(
+      currentMlbGames.map(
+        (game) =>
+          String(
+            game.gamePk,
+          ),
+      ),
+    );
+
+  console.log(
+    `🔥 串關頁目前 MLB 有效賽事：${currentMlbGamePks.size} 場`,
+  );
+} catch (error) {
+  console.error(
+    "串關頁讀取目前 MLB 賽程失敗:",
+    error,
+  );
+}
+
+/*
+ * ==========================================
+ * 有效 Pick
+ *
+ * FOOTBALL：
+ * 維持原本 pending 邏輯
+ *
+ * MLB：
+ * 除了 pending 之外，
+ * gamePk 還必須存在於目前 MLB 顯示日賽程
+ * ==========================================
+ */
+const availablePicks =
+  histories
+    .filter(
+      isValidPrediction,
+    )
+    .filter(
+      (item) => {
+        const sport =
+          normalize(
+            item.sport,
+          );
+
+        /*
+         * 足球維持原本邏輯
+         */
+        if (
+          sport === "football" ||
+          sport === "soccer"
+        ) {
+          return true;
+        }
+
+        /*
+         * MLB 只保留目前顯示日賽程
+         */
+        if (
+          sport === "mlb"
+        ) {
+          return currentMlbGamePks.has(
+            String(
+              item.game_pk,
+            ),
+          );
+        }
+
+        return false;
+      },
+    )
+    .map(
+      toParlayPick,
+    )
+    .sort(
+      (
+        a,
+        b,
+      ) =>
+        b.confidence -
+        a.confidence,
+    );
 
   /*
    * ==========================================
