@@ -183,13 +183,40 @@ export default async function HistoryPage() {
    * ==========================================
    */
   const validHistories =
-    histories.filter(
-      (item) =>
-        isValidPrediction(
+  histories.filter(
+    (item) => {
+      if (
+        !isValidPrediction(
           item,
-        ),
-    );
+        )
+      ) {
+        return false;
+      }
 
+      const result =
+        String(
+          item.result ?? "",
+        )
+          .trim()
+          .toLowerCase();
+
+      /*
+       * 歷史戰績只顯示已結算
+       * pending / 尚未結束的預測全部排除
+       */
+      return (
+        result === "win" ||
+        result === "won" ||
+        result === "correct" ||
+        result === "loss" ||
+        result === "lose" ||
+        result === "lost" ||
+        result === "wrong" ||
+        result === "push" ||
+        result === "void"
+      );
+    },
+  );
   const stats =
     getPredictionHistoryStats(
       histories,
@@ -431,13 +458,7 @@ export default async function HistoryPage() {
           </div>
         ) : (
           <>
-            <HistoryGroup
-              title="📅 今日預測"
-              subtitle="今天建立的 XSI AI 預測"
-              histories={
-                todayHistories
-              }
-            />
+          
 
             <HistoryGroup
               title="🌙 昨日預測"
