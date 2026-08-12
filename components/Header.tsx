@@ -4,10 +4,10 @@ export default function Header() {
       <div className="flex items-center justify-between px-6 py-4">
         <div>
           <h1 className="text-2xl font-bold text-yellow-400">
-            十一體育分析 AI
+            XSI SPORTS AI
           </h1>
           <p className="text-sm text-zinc-400">
-            運動數據智慧平台
+            體育數據分析平台
           </p>
         </div>
 

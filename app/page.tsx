@@ -307,11 +307,11 @@ export default async function Home() {
           <div className="min-w-0">
 
             <h1 className="truncate text-xl font-black text-yellow-400 sm:text-2xl">
-              十一體育分析 AI
+              XSI SPORTS AI
             </h1>
 
             <p className="mt-1 hidden text-sm text-zinc-400 sm:block">
-              運動數據智慧平台
+              體育數據分析平台
             </p>
 
           </div>
