@@ -138,7 +138,7 @@ export default function Sidebar() {
               >
                 <div className="flex items-center gap-3">
                   <span>🧮</span>
-                  <span>賠率計算器</span>
+                  <span>串關賠率計算</span>
                 </div>
 
                 <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-black tracking-wider text-emerald-400">

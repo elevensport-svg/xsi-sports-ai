@@ -1,17 +1,15 @@
 export type BetType =
-  | "Moneyline"
-  | "Run Line"
-  | "Run Line +1.5";
+  | "獨贏"
+  | "讓分"
+  | "受讓 +1.5";
 
 export type BetAdvisorResult = {
   recommendation: BetType;
   confidence: number;
   score: number;
-
   reasons: string[];
   risk: string;
 };
-
 
 type BetAdvisorInput = {
   pitch: number;
@@ -23,7 +21,6 @@ type BetAdvisorInput = {
   spread?: number | null;
 };
 
-
 function clamp(
   value: number,
 ): number {
@@ -32,7 +29,6 @@ function clamp(
     Math.min(100, value),
   );
 }
-
 
 function getRisk(
   confidence: number,
@@ -48,10 +44,12 @@ function getRisk(
   return "高風險";
 }
 
-
 export function calculateBetAdvisor(
   input: BetAdvisorInput,
 ): BetAdvisorResult {
+  /* =========================
+     綜合模型分數
+  ========================= */
 
   const score =
     input.pitch * 0.25 +
@@ -60,14 +58,16 @@ export function calculateBetAdvisor(
     input.form * 0.15 +
     input.market * 0.15;
 
+  const finalScore =
+    Math.round(
+      clamp(score),
+    );
 
-  const finalScore = Math.round(
-    clamp(score),
-  );
-
+  /* =========================
+     判斷依據
+  ========================= */
 
   const reasons: string[] = [];
-
 
   if (input.pitch >= 80) {
     reasons.push(
@@ -75,13 +75,11 @@ export function calculateBetAdvisor(
     );
   }
 
-
   if (input.bullpen >= 80) {
     reasons.push(
       "牛棚戰力較佳",
     );
   }
-
 
   if (input.batting >= 80) {
     reasons.push(
@@ -89,6 +87,11 @@ export function calculateBetAdvisor(
     );
   }
 
+  if (input.form >= 75) {
+    reasons.push(
+      "近期球隊狀態良好",
+    );
+  }
 
   if (input.market >= 80) {
     reasons.push(
@@ -96,41 +99,76 @@ export function calculateBetAdvisor(
     );
   }
 
-
   if (reasons.length === 0) {
     reasons.push(
-      "目前沒有單一明顯優勢",
+      "整體數據較為接近",
     );
   }
 
+  /* =========================
+     投注方向
+  ========================= */
 
   let recommendation: BetType =
-    "Moneyline";
+    "獨贏";
 
+  const spread =
+    input.spread;
 
   if (
-    input.spread !== null &&
-    input.spread !== undefined
+    spread !== null &&
+    spread !== undefined
   ) {
-
-    if (finalScore >= 85) {
+    /*
+     * 強勢方 + 讓分盤
+     */
+    if (
+      spread <= -1 &&
+      finalScore >= 80
+    ) {
       recommendation =
-        "Run Line";
+        "讓分";
+
+      reasons.push(
+        "模型優勢足以支持讓分方向",
+      );
     }
 
-    if (finalScore < 70) {
+    /*
+     * 弱勢方 + 受讓盤
+     */
+    else if (
+      spread >= 1 &&
+      finalScore >= 60 &&
+      finalScore < 72
+    ) {
       recommendation =
-        "Run Line +1.5";
+        "受讓 +1.5";
+
+      reasons.push(
+        "模型優勢不足但受讓具保護空間",
+      );
     }
 
+    /*
+     * 其他情況
+     */
+    else {
+      recommendation =
+        "獨贏";
+    }
   }
-
 
   return {
     recommendation,
-    confidence: finalScore,
-    score: finalScore,
+    confidence:
+      finalScore,
+    score:
+      finalScore,
     reasons,
-    risk: getRisk(finalScore),
+    risk:
+      getRisk(
+        finalScore,
+      ),
   };
 }

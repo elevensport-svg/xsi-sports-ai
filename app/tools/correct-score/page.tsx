@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUserMembership } from "../../../lib/membership";
 
+const LINE_URL = "https://lin.ee/r8t6pBB4";
+
 export default async function CorrectScorePage() {
   const membership =
     await getCurrentUserMembership();
@@ -27,7 +29,7 @@ export default async function CorrectScorePage() {
           <div className="mt-10 overflow-hidden rounded-3xl border border-yellow-500/20 bg-zinc-900">
             <div className="border-b border-zinc-800 bg-gradient-to-r from-yellow-400/10 to-transparent p-6 sm:p-8">
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-yellow-400">
-                XSI AI CORRECT SCORE
+                XSI AI 波膽分析
               </p>
 
               <h1 className="mt-3 text-3xl font-black sm:text-4xl">
@@ -47,7 +49,7 @@ export default async function CorrectScorePage() {
                 </div>
 
                 <p className="mt-6 text-xs font-bold uppercase tracking-[0.25em] text-yellow-400">
-                  VIP ONLY
+                  VIP 專屬
                 </p>
 
                 <h2 className="mt-3 text-2xl font-black">
@@ -61,13 +63,13 @@ export default async function CorrectScorePage() {
                 </p>
 
                 <a
-  href="https://lin.ee/r8t6pBB4"
-  target="_blank"
-  rel="noopener noreferrer"
-  className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-yellow-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-yellow-300"
->
-  升級 VIP 解鎖
-</a>
+                  href={LINE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-yellow-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-yellow-300"
+                >
+                  升級 VIP 解鎖
+                </a>
 
                 <Link
                   href="/"
@@ -95,7 +97,7 @@ export default async function CorrectScorePage() {
 
         <div className="mt-8">
           <p className="text-xs font-bold uppercase tracking-[0.25em] text-yellow-400">
-            XSI AI CORRECT SCORE
+            XSI AI 波膽分析
           </p>
 
           <h1 className="mt-2 text-3xl font-black sm:text-4xl">
@@ -132,7 +134,7 @@ export default async function CorrectScorePage() {
 
         <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
           <p className="text-xs font-bold uppercase tracking-widest text-yellow-400">
-            AI Recommendation
+            AI 推薦
           </p>
 
           <h2 className="mt-2 text-xl font-black">
@@ -164,7 +166,7 @@ function ScoreCard({
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
       <div className="flex items-center justify-between">
         <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
-          Correct Score
+          波膽比分
         </p>
 
         <span className="rounded-full border border-yellow-500/20 bg-yellow-400/10 px-3 py-1 text-xs font-bold text-yellow-400">
