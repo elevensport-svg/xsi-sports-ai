@@ -561,6 +561,58 @@ export default async function FootballPage({
         ),
     );
 
+  /*
+   * ==========================================
+   * DISPLAY ORDER
+   *
+   * 每日 3 場免費預測固定排在最上面。
+   * 其餘賽事維持原本賽程順序。
+   * 聯賽篩選後也會優先顯示該篩選中
+   * 屬於今日 FREE 的場次。
+   * ==========================================
+   */
+  const sortedFilteredGames =
+    [
+      ...filteredGames,
+    ].sort(
+      (
+        a,
+        b,
+      ) => {
+        const aIsFree =
+          freeGameIds.has(
+            String(
+              a.id,
+            ),
+          );
+
+        const bIsFree =
+          freeGameIds.has(
+            String(
+              b.id,
+            ),
+          );
+
+        if (
+          aIsFree !==
+          bIsFree
+        ) {
+          return aIsFree
+            ? -1
+            : 1;
+        }
+
+        return (
+          new Date(
+            a.commenceTime,
+          ).getTime() -
+          new Date(
+            b.commenceTime,
+          ).getTime()
+        );
+      },
+    );
+
   const analyzedCount =
     predictionMap.size;
 
@@ -815,7 +867,7 @@ export default async function FootballPage({
         ) : (
           <section className="mt-8 grid gap-5 lg:grid-cols-2">
 
-            {filteredGames.map(
+            {sortedFilteredGames.map(
               (game) => {
                 const gameId =
                   String(
