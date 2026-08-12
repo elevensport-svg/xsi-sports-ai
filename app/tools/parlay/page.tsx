@@ -349,25 +349,81 @@ function createParlayGroup({
   allPicks,
 }: {
   level: string;
-
   legs: number;
-
   risk: string;
-
   description: string;
-
-  allPicks:
-    ParlayPick[];
+  allPicks: ParlayPick[];
 }): ParlayGroup {
-  const picks =
-    allPicks.slice(
-      0,
-      legs,
+  const picks: ParlayPick[] =
+    [];
+
+  const usedMatchups =
+    new Set<string>();
+
+  for (
+    const pick
+    of allPicks
+  ) {
+    /*
+     * ========================================
+     * 建立對戰識別
+     *
+     * 同一組球隊互打，不論 gamePk 是否不同，
+     * 同一張串關最多只能選一場。
+     *
+     * 例如：
+     * 坦帕灣光芒 vs 運動家
+     * 坦帕灣光芒 vs 運動家
+     *
+     * 只保留信心較高的那一場。
+     * ========================================
+     */
+
+    const teamA =
+      normalize(
+        pick.awayTeam,
+      );
+
+    const teamB =
+      normalize(
+        pick.homeTeam,
+      );
+
+    /*
+     * 排序後組成 key，
+     * 避免主客交換時被當成不同對戰。
+     */
+    const matchupKey =
+      [teamA, teamB]
+        .sort()
+        .join("::");
+
+    if (
+      usedMatchups.has(
+        matchupKey,
+      )
+    ) {
+      continue;
+    }
+
+    picks.push(
+      pick,
     );
+
+    usedMatchups.add(
+      matchupKey,
+    );
+
+    if (
+      picks.length ===
+      legs
+    ) {
+      break;
+    }
+  }
 
   return {
     level,
-
     legs,
 
     averageConfidence:
@@ -376,9 +432,7 @@ function createParlayGroup({
       ),
 
     risk,
-
     description,
-
     picks,
   };
 }
