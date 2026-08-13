@@ -87,6 +87,89 @@ const mobileMenuItems = [
   },
 ];
 
+
+function normalizePredictionText(
+  value: string | null | undefined,
+) {
+  return String(
+    value ?? "",
+  ).trim();
+}
+
+function predictionHasTeamName(
+  item: PredictionHistory,
+) {
+  const prediction =
+    normalizePredictionText(
+      item.prediction,
+    );
+
+  const awayTeam =
+    normalizePredictionText(
+      item.away_team,
+    );
+
+  const homeTeam =
+    normalizePredictionText(
+      item.home_team,
+    );
+
+  if (!prediction) {
+    return false;
+  }
+
+  return (
+    Boolean(
+      awayTeam &&
+        prediction.includes(
+          awayTeam,
+        ),
+    ) ||
+    Boolean(
+      homeTeam &&
+        prediction.includes(
+          homeTeam,
+        ),
+    )
+  );
+}
+
+function isPendingPrediction(
+  result: string | null | undefined,
+) {
+  return (
+    String(
+      result ?? "",
+    )
+      .trim()
+      .toLowerCase() ===
+    "pending"
+  );
+}
+
+function getTaiwanCreatedDateKey(
+  createdAt: string,
+) {
+  try {
+    return new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone:
+          "Asia/Taipei",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      },
+    ).format(
+      new Date(
+        createdAt,
+      ),
+    );
+  } catch {
+    return "";
+  }
+}
+
 export default async function Home() {
   const membership =
     await getCurrentUserMembership();
@@ -261,26 +344,86 @@ export default async function Home() {
   /*
    * ==========================================
    * 今日免費精選
+   *
+   * 只使用：
+   * - MLB
+   * - pending
+   * - 有效 prediction
+   * - prediction 已包含明確球隊名稱
+   *
+   * 先鎖定最新一批建立日期，
+   * 再從該批挑最高信心，
+   * 避免從舊歷史資料抓到只有「獨贏」
+   * 或「受讓 +1.5」的舊格式。
    * ==========================================
    */
-  const freePick =
-    [...histories]
-      .filter(
+  const pendingMlbPredictions =
+    histories.filter(
+      (item) =>
+        isValidMlbPrediction(
+          item,
+        ) &&
+        isPendingPrediction(
+          item.result,
+        ) &&
+        predictionHasTeamName(
+          item,
+        ),
+    );
+
+  const latestPendingDateKey =
+    pendingMlbPredictions
+      .map(
         (item) =>
-          isValidMlbPrediction(
-            item,
+          getTaiwanCreatedDateKey(
+            item.created_at,
           ),
       )
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? "";
+
+  const latestPendingMlbPredictions =
+    latestPendingDateKey
+      ? pendingMlbPredictions.filter(
+          (item) =>
+            getTaiwanCreatedDateKey(
+              item.created_at,
+            ) ===
+            latestPendingDateKey,
+        )
+      : pendingMlbPredictions;
+
+  const freePick =
+    [...latestPendingMlbPredictions]
       .sort(
-        (a, b) =>
-          Number(
-            b.confidence ??
-              0,
-          ) -
-          Number(
-            a.confidence ??
-              0,
-          ),
+        (a, b) => {
+          const confidenceDiff =
+            Number(
+              b.confidence ??
+                0,
+            ) -
+            Number(
+              a.confidence ??
+                0,
+            );
+
+          if (
+            confidenceDiff !==
+            0
+          ) {
+            return confidenceDiff;
+          }
+
+          return (
+            new Date(
+              b.created_at,
+            ).getTime() -
+            new Date(
+              a.created_at,
+            ).getTime()
+          );
+        },
       )[0] ?? null;
 
   /*

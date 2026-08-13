@@ -12,6 +12,11 @@ import {
   createAdminClient,
 } from "../../../lib/supabase/admin";
 
+import {
+  getCachedFootballSchedule,
+} from "../../../lib/services/footballSchedule";
+
+
 const LINE_URL =
   "https://lin.ee/r8t6pBB4";
 
@@ -57,6 +62,10 @@ type ParlayPick = {
   prediction: string;
 
   confidence: number;
+
+  gameTime:
+    | string
+    | null;
 };
 
 type ParlayGroup = {
@@ -252,6 +261,9 @@ function isValidPrediction(
 function toParlayPick(
   item:
     PredictionHistory,
+  gameTime:
+    | string
+    | null,
 ): ParlayPick {
   const confidenceRaw =
     Number(
@@ -302,7 +314,45 @@ function toParlayPick(
       item.prediction,
 
     confidence,
+
+    gameTime,
   };
+}
+
+/* ==========================================
+   比賽時間
+========================================== */
+
+function formatGameTime(
+  gameTime:
+    | string
+    | null,
+) {
+  if (!gameTime) {
+    return "時間待定";
+  }
+
+  try {
+    return new Intl.DateTimeFormat(
+      "zh-TW",
+      {
+        timeZone:
+          "Asia/Taipei",
+        month: "numeric",
+        day: "numeric",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      },
+    ).format(
+      new Date(
+        gameTime,
+      ),
+    );
+  } catch {
+    return "時間待定";
+  }
 }
 
 /* ==========================================
@@ -621,14 +671,27 @@ export default async function ParlayPage() {
 
 /*
  * ==========================================
- * 取得目前 MLB 顯示日賽程
+ * 取得目前 MLB / 足球賽程時間
  *
- * 只允許目前畫面真正存在的 MLB gamePk
- * 舊 pending MLB 不再進串關。
+ * MLB：
+ * 使用 getCurrentMlbSchedule()
+ *
+ * FOOTBALL：
+ * 使用 football_schedule 快取
+ *
+ * 串關卡與 TOP PICKS
+ * 都統一顯示台灣時間。
  * ==========================================
  */
+
 let currentMlbGamePks =
   new Set<string>();
+
+const mlbGameTimeMap =
+  new Map<
+    string,
+    string
+  >();
 
 try {
   const currentMlbGames =
@@ -644,12 +707,65 @@ try {
       ),
     );
 
+  for (
+    const game
+    of currentMlbGames
+  ) {
+    mlbGameTimeMap.set(
+      String(
+        game.gamePk,
+      ),
+      game.gameDate,
+    );
+  }
+
   console.log(
     `🔥 串關頁目前 MLB 有效賽事：${currentMlbGamePks.size} 場`,
   );
 } catch (error) {
   console.error(
     "串關頁讀取目前 MLB 賽程失敗:",
+    error,
+  );
+}
+
+const footballGameTimeMap =
+  new Map<
+    string,
+    string
+  >();
+
+try {
+  const currentFootballGames =
+    await getCachedFootballSchedule(
+      14,
+    );
+
+  for (
+    const game
+    of currentFootballGames
+  ) {
+    const gameId =
+      String(
+        game.id,
+      );
+
+    if (
+      game.commenceTime
+    ) {
+      footballGameTimeMap.set(
+        gameId,
+        game.commenceTime,
+      );
+    }
+  }
+
+  console.log(
+    `🔥 串關頁足球賽程時間：${footballGameTimeMap.size} 場`,
+  );
+} catch (error) {
+  console.error(
+    "串關頁讀取足球賽程時間失敗:",
     error,
   );
 }
@@ -705,7 +821,32 @@ const availablePicks =
       },
     )
     .map(
-      toParlayPick,
+      (item) => {
+        const sport =
+          normalize(
+            item.sport,
+          );
+
+        const gameTime =
+          sport === "mlb"
+            ? mlbGameTimeMap.get(
+                String(
+                  item.game_pk,
+                ),
+              ) ??
+              null
+            : footballGameTimeMap.get(
+                String(
+                  item.game_pk,
+                ),
+              ) ??
+              null;
+
+        return toParlayPick(
+          item,
+          gameTime,
+        );
+      },
     )
     .sort(
       (
@@ -1001,6 +1142,15 @@ const availablePicks =
                               }
                             </p>
 
+                            <p className="mt-2 text-xs font-bold text-zinc-500">
+                              比賽時間：
+                              {
+                                formatGameTime(
+                                  pick.gameTime,
+                                )
+                              }
+                            </p>
+
                             <p className="mt-3 break-words text-lg font-black text-yellow-400">
                               {
                                 pick.prediction
@@ -1207,6 +1357,15 @@ function ParlayCard({
 
                   {
                     pick.homeTeam
+                  }
+                </p>
+
+                <p className="mt-2 text-[11px] font-bold text-zinc-600">
+                  比賽時間：
+                  {
+                    formatGameTime(
+                      pick.gameTime,
+                    )
                   }
                 </p>
 

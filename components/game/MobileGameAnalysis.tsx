@@ -13,8 +13,13 @@ import H2HCard from "../cards/H2HCard";
 import RecentGamesCard from "../cards/RecentGamesCard";
 import MarketCard from "../cards/MarketCard";
 
-import { getMlbTeamLogo } from "../../lib/teams/mlb";
-import { formatTaiwanGameTime } from "../../lib/api/mlb";
+import {
+  getMlbTeamLogo,
+} from "../../lib/teams/mlb";
+
+import {
+  formatTaiwanGameTime,
+} from "../../lib/api/mlb";
 
 type Props = {
   data: any;
@@ -102,6 +107,8 @@ export default function MobileGameAnalysis({
 
     betAdvisor,
 
+    selectedTeamName,
+
     awayXsi,
     homeXsi,
 
@@ -121,12 +128,10 @@ export default function MobileGameAnalysis({
   return (
     <main className="min-h-screen bg-zinc-950 px-3 py-4 pb-28 text-white">
       <div className="mx-auto w-full max-w-xl">
-
         {/* =========================
             GAME HEADER
         ========================= */}
         <section className="rounded-2xl border border-yellow-500/20 bg-zinc-900 p-4">
-
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-bold text-yellow-400">
               MLB 賽事分析
@@ -161,13 +166,18 @@ export default function MobileGameAnalysis({
           </p>
 
           <div className="mt-6 grid grid-cols-[1fr_28px_1fr] items-center gap-2">
-
             <TeamBox
               side="客隊"
               teamId={awayTeamId}
-              teamName={awayTeamName}
-              pitcher={awayPitcher}
-              score={awayPitcherScore}
+              teamName={
+                awayTeamName
+              }
+              pitcher={
+                awayPitcher
+              }
+              score={
+                awayPitcherScore
+              }
             />
 
             <div className="flex items-center justify-center text-lg font-black text-yellow-400">
@@ -177,13 +187,17 @@ export default function MobileGameAnalysis({
             <TeamBox
               side="主隊"
               teamId={homeTeamId}
-              teamName={homeTeamName}
-              pitcher={homePitcher}
-              score={homePitcherScore}
+              teamName={
+                homeTeamName
+              }
+              pitcher={
+                homePitcher
+              }
+              score={
+                homePitcherScore
+              }
             />
-
           </div>
-
         </section>
 
         {/* =========================
@@ -191,15 +205,21 @@ export default function MobileGameAnalysis({
         ========================= */}
         <div className="mt-5">
           <WinProbabilityCard
-            awayTeamName={awayTeamName}
-            homeTeamName={homeTeamName}
+            awayTeamName={
+              awayTeamName
+            }
+            homeTeamName={
+              homeTeamName
+            }
             awayProbability={
               winProbability.awayWinProbability
             }
             homeProbability={
               winProbability.homeWinProbability
             }
-            isVip={membership.isVip}
+            isVip={
+              membership.isVip
+            }
           />
         </div>
 
@@ -208,9 +228,15 @@ export default function MobileGameAnalysis({
         ========================= */}
         <div className="mt-5">
           <ValueScoreCard
-            score={valueScore.score}
-            grade={valueScore.grade}
-            isVip={membership.isVip}
+            score={
+              valueScore.score
+            }
+            grade={
+              valueScore.grade
+            }
+            isVip={
+              membership.isVip
+            }
           />
         </div>
 
@@ -219,11 +245,24 @@ export default function MobileGameAnalysis({
         ========================= */}
         <div className="mt-5">
           <AIRecommendationCard
-            isVip={membership.isVip}
-            awayTeamName={awayTeamName}
-            homeTeamName={homeTeamName}
-            awayXsi={awayXsi}
-            homeXsi={homeXsi}
+            isVip={
+              membership.isVip
+            }
+            awayTeamName={
+              awayTeamName
+            }
+            homeTeamName={
+              homeTeamName
+            }
+            selectedTeamName={
+              selectedTeamName
+            }
+            awayXsi={
+              awayXsi
+            }
+            homeXsi={
+              homeXsi
+            }
             awayPitchScore={
               awayPitcherScore.score
             }
@@ -264,29 +303,34 @@ export default function MobileGameAnalysis({
           <>
             <div className="mt-5">
               <BetAdvisorCard
-  isVip={membership.isVip}
-  recommendation={
-    betAdvisor.recommendation
-  }
-  confidence={
-    betAdvisor.confidence
-  }
-  score={
-    betAdvisor.score
-  }
-  reasons={
-    betAdvisor.reasons
-  }
-  risk={
-    betAdvisor.risk
-  }
-  awayTeamName={
-    awayTeamName
-  }
-  homeTeamName={
-    homeTeamName
-  }
-/>
+                isVip={
+                  membership.isVip
+                }
+                recommendation={
+                  betAdvisor.recommendation
+                }
+                confidence={
+                  betAdvisor.confidence
+                }
+                score={
+                  betAdvisor.score
+                }
+                reasons={
+                  betAdvisor.reasons
+                }
+                risk={
+                  betAdvisor.risk
+                }
+                awayTeamName={
+                  awayTeamName
+                }
+                homeTeamName={
+                  homeTeamName
+                }
+                selectedTeamName={
+                  selectedTeamName
+                }
+              />
             </div>
 
             <div className="mt-5">
@@ -338,7 +382,6 @@ export default function MobileGameAnalysis({
             </div>
           </>
         )}
-
       </div>
     </main>
   );
@@ -358,16 +401,19 @@ function TeamBox({
 
   return (
     <div className="min-w-0 rounded-2xl bg-zinc-800 p-2.5 text-center">
-
       <p className="text-[10px] text-zinc-400">
         {side}
       </p>
 
       <img
-        src={getMlbTeamLogo(
-          teamId,
-        )}
-        alt={teamName}
+        src={
+          getMlbTeamLogo(
+            teamId,
+          )
+        }
+        alt={
+          teamName
+        }
         className="mx-auto mt-3 h-14 w-14 object-contain"
       />
 
@@ -376,7 +422,6 @@ function TeamBox({
       </h2>
 
       <div className="mt-3 rounded-xl bg-zinc-900 p-2.5">
-
         <p className="text-[9px] text-zinc-400">
           先發投手
         </p>
@@ -389,9 +434,7 @@ function TeamBox({
         <p className="mt-3 text-3xl font-black text-yellow-400">
           {pitchScore}
         </p>
-
       </div>
-
     </div>
   );
 }

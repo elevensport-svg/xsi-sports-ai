@@ -30,6 +30,8 @@ type ExistingPrediction = {
   home_team: string | null;
   away_team: string | null;
   prediction: string | null;
+  confidence: number | string | null;
+  result: string | null;
 };
 
 function getErrorMessage(
@@ -54,67 +56,6 @@ function getErrorMessage(
 
 /*
  * ==========================================
- * 判斷 prediction 是否已經是完整格式
- *
- * 正確：
- * 坦帕灣光芒 獨贏
- * 紐約洋基 讓分 -1.5
- * 芝加哥小熊 受讓 +1.5
- *
- * 舊格式：
- * 獨贏
- * 讓分
- * 受讓 +1.5
- * Run Line +1.5
- * Moneyline
- *
- * 核心規則：
- * prediction 必須包含主隊或客隊名稱
- * ==========================================
- */
-function hasTeamName(
-  row: ExistingPrediction,
-) {
-  const prediction =
-    row.prediction
-      ?.trim() ?? "";
-
-  const homeTeam =
-    row.home_team
-      ?.trim() ?? "";
-
-  const awayTeam =
-    row.away_team
-      ?.trim() ?? "";
-
-  if (!prediction) {
-    return false;
-  }
-
-  const hasHomeTeam =
-    Boolean(
-      homeTeam &&
-      prediction.includes(
-        homeTeam,
-      ),
-    );
-
-  const hasAwayTeam =
-    Boolean(
-      awayTeam &&
-      prediction.includes(
-        awayTeam,
-      ),
-    );
-
-  return (
-    hasHomeTeam ||
-    hasAwayTeam
-  );
-}
-
-/*
- * ==========================================
  * 建立完整推薦文字
  *
  * 最終格式：
@@ -122,6 +63,11 @@ function hasTeamName(
  * 球隊名稱 獨贏
  * 球隊名稱 讓分 -1.5
  * 球隊名稱 受讓 +1.5
+ *
+ * 球隊方向完全使用：
+ * analysis.selectedTeamName
+ *
+ * 不再自己猜主隊 / 客隊。
  * ==========================================
  */
 function buildPredictionText(
@@ -146,22 +92,21 @@ function buildPredictionText(
     );
   }
 
+  const lowerRecommendation =
+    recommendation.toLowerCase();
+
   /*
    * ========================================
    * 受讓
-   *
-   * 必須放在「讓分」前面判斷
    * ========================================
    */
   if (
     recommendation.includes(
       "受讓",
     ) ||
-    recommendation
-      .toLowerCase()
-      .includes(
-        "run line +",
-      )
+    lowerRecommendation.includes(
+      "run line +",
+    )
   ) {
     return `${teamName} 受讓 +1.5`;
   }
@@ -177,11 +122,9 @@ function buildPredictionText(
     recommendation.includes(
       "讓分 -",
     ) ||
-    recommendation
-      .toLowerCase()
-      .includes(
-        "run line -",
-      )
+    lowerRecommendation.includes(
+      "run line -",
+    )
   ) {
     return `${teamName} 讓分 -1.5`;
   }
@@ -194,24 +137,23 @@ function buildPredictionText(
   if (
     recommendation ===
       "獨贏" ||
-    recommendation
-      .toLowerCase()
-      .includes(
-        "moneyline",
-      )
+    lowerRecommendation.includes(
+      "moneyline",
+    ) ||
+    lowerRecommendation.includes(
+      "money line",
+    )
   ) {
     return `${teamName} 獨贏`;
   }
 
   /*
-   * ========================================
    * fallback
-   *
-   * 目前 BetAdvisor 如果回傳其他格式，
-   * 先保留球隊名稱，避免再次只存玩法。
-   * ========================================
    */
-  return `${teamName} ${recommendation || "獨贏"}`;
+  return `${teamName} ${
+    recommendation ||
+    "獨贏"
+  }`;
 }
 
 export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrowMlbResult> {
@@ -269,13 +211,20 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
    * ==========================================
    * 3. 讀取目前 prediction_history
    *
-   * 一次把：
-   * game_pk
-   * home_team
-   * away_team
-   * prediction
+   * 這次不再只檢查「有沒有球隊名稱」。
    *
-   * 全部讀出來
+   * 原因：
+   * 舊版即使已經是：
+   *
+   * 某某隊 受讓 +1.5
+   *
+   * 也可能是舊模型方向產生的錯誤推薦。
+   *
+   * 所以目前顯示日的 MLB 賽事
+   * 每次批次產生都重新分析，
+   * 以新版 Win Probability →
+   * selectedTeamName → Bet Advisor
+   * 覆蓋 prediction / confidence。
    * ==========================================
    */
   const {
@@ -288,7 +237,14 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
       "prediction_history",
     )
     .select(
-      "game_pk,home_team,away_team,prediction",
+      `
+        game_pk,
+        home_team,
+        away_team,
+        prediction,
+        confidence,
+        result
+      `,
     )
     .eq(
       "sport",
@@ -329,80 +285,33 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
     );
   }
 
-  /*
-   * ==========================================
-   * 4. 找出需要處理的比賽
-   *
-   * 情況 A：
-   * prediction_history 完全沒有
-   *
-   * 情況 B：
-   * 有資料，但 prediction 沒有球隊名稱
-   * ==========================================
-   */
-  const gamesToAnalyze =
-    games.filter(
-      (game) => {
-        const gamePk =
-          String(
-            game.gamePk,
-          );
-
-        const existing =
-          existingMap.get(
-            gamePk,
-          );
-
-        /*
-         * 完全沒有資料
-         */
-        if (!existing) {
-          console.log(
-            `➕ MLB ${gamePk} 尚未建立預測`,
-          );
-
-          return true;
-        }
-
-        /*
-         * 有資料但格式不完整
-         */
-        if (
-          !hasTeamName(
-            existing,
-          )
-        ) {
-          console.log(
-            `🔧 MLB ${gamePk} 舊格式：${existing.prediction ?? "空白"}`,
-          );
-
-          return true;
-        }
-
-        /*
-         * 已經是完整格式
-         */
-        return false;
-      },
-    );
-
   summary.existing =
-    games.length -
-    gamesToAnalyze.length;
+    existingMap.size;
 
   summary.missing =
-    gamesToAnalyze.length;
+    games.filter(
+      (game) =>
+        !existingMap.has(
+          String(
+            game.gamePk,
+          ),
+        ),
+    ).length;
 
   console.log(
     "======================================",
   );
 
   console.log(
-    `✅ MLB 完整格式：${summary.existing}`,
+    `✅ MLB 已存在：${summary.existing}`,
   );
 
   console.log(
-    `🔧 MLB 需要新增 / 更新：${summary.missing}`,
+    `➕ MLB 尚未建立：${summary.missing}`,
+  );
+
+  console.log(
+    `🧠 MLB 本輪重新分析：${games.length}`,
   );
 
   console.log(
@@ -411,28 +320,23 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
 
   /*
    * ==========================================
-   * 5. 全部正常
-   * ==========================================
-   */
-  if (
-    gamesToAnalyze.length ===
-    0
-  ) {
-    console.log(
-      "✅ MLB 本日所有 prediction 都已包含球隊名稱。",
-    );
-
-    return summary;
-  }
-
-  /*
-   * ==========================================
-   * 6. 開始分析
+   * 4. 每一場都重新分析
+   *
+   * 目的：
+   * 保證 prediction_history 使用最新版：
+   *
+   * Win Probability
+   * ↓
+   * selectedTeamName
+   * ↓
+   * Bet Advisor
+   * ↓
+   * 完整 prediction
    * ==========================================
    */
   for (
     const game
-    of gamesToAnalyze
+    of games
   ) {
     const gamePk =
       Number(
@@ -472,7 +376,7 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
 
       /*
        * ======================================
-       * 7. 建立完整 prediction
+       * 5. 建立完整 prediction
        * ======================================
        */
       const prediction =
@@ -497,6 +401,10 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
         );
 
       console.log(
+        `🎯 模型方向：${analysis.selectedTeamName}`,
+      );
+
+      console.log(
         `🎯 推薦：${prediction}`,
       );
 
@@ -506,7 +414,10 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
 
       /*
        * ======================================
-       * 8A. 已存在 → UPDATE
+       * 6A. 已存在 → UPDATE
+       *
+       * result 不修改。
+       * 已經 settled 的資料不會被改回 pending。
        * ======================================
        */
       if (existing) {
@@ -551,15 +462,11 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
         );
 
         console.log(
-          `   ${existing.prediction ?? "空白"}`,
+          `   舊：${existing.prediction ?? "空白"}`,
         );
 
         console.log(
-          `   ↓`,
-        );
-
-        console.log(
-          `   ${prediction}`,
+          `   新：${prediction}`,
         );
 
         continue;
@@ -567,7 +474,7 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
 
       /*
        * ======================================
-       * 8B. 不存在 → INSERT
+       * 6B. 不存在 → INSERT
        * ======================================
        */
       const {
@@ -608,12 +515,51 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
           insertError.code ===
           "23505"
         ) {
-          console.log(
-            `ℹ️ MLB ${gamePk} 已由其他請求建立。`,
-          );
+          /*
+           * Race condition：
+           * 如果另一個請求剛建立，
+           * 再補一次 UPDATE，
+           * 確保它也是最新版推薦。
+           */
+          const {
+            error:
+              raceUpdateError,
+          } = await supabase
+            .from(
+              "prediction_history",
+            )
+            .update({
+              home_team:
+                analysis.homeTeamName,
 
-          summary.existing +=
+              away_team:
+                analysis.awayTeamName,
+
+              prediction,
+
+              confidence,
+            })
+            .eq(
+              "game_pk",
+              key,
+            )
+            .eq(
+              "sport",
+              "MLB",
+            );
+
+          if (
+            raceUpdateError
+          ) {
+            throw raceUpdateError;
+          }
+
+          summary.updated +=
             1;
+
+          console.log(
+            `ℹ️ MLB ${gamePk} 已由其他請求建立，已同步更新最新版推薦。`,
+          );
 
           continue;
         }
@@ -650,7 +596,7 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
 
   /*
    * ==========================================
-   * 9. 完成
+   * 7. 完成
    * ==========================================
    */
   console.log(
@@ -666,11 +612,11 @@ export async function generateTomorrowMlbPredictions(): Promise<GenerateTomorrow
   );
 
   console.log(
-    `✅ 原本完整：${summary.existing}`,
+    `✅ 原本已有：${summary.existing}`,
   );
 
   console.log(
-    `🔧 需要處理：${summary.missing}`,
+    `➕ 原本缺少：${summary.missing}`,
   );
 
   console.log(

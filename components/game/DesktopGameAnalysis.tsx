@@ -1,4 +1,3 @@
-import BullpenCard from "../cards/BullpenCard";
 import WinProbabilityCard from "../cards/WinProbabilityCard";
 import ValueScoreCard from "../cards/ValueScoreCard";
 import BetAdvisorCard from "../cards/BetAdvisorCard";
@@ -7,8 +6,13 @@ import H2HCard from "../cards/H2HCard";
 import RecentGamesCard from "../cards/RecentGamesCard";
 import MarketCard from "../cards/MarketCard";
 
-import { getMlbTeamLogo } from "../../lib/teams/mlb";
-import { formatTaiwanGameTime } from "../../lib/api/mlb";
+import {
+  getMlbTeamLogo,
+} from "../../lib/teams/mlb";
+
+import {
+  formatTaiwanGameTime,
+} from "../../lib/api/mlb";
 
 type Props = {
   data: any;
@@ -27,6 +31,13 @@ export default function DesktopGameAnalysis({
     awayTeamName,
     homeTeamName,
 
+    /*
+     * ========================================
+     * 統一模型最終方向
+     * ========================================
+     */
+    selectedTeamName,
+
     awayPitcher,
     homePitcher,
 
@@ -36,17 +47,8 @@ export default function DesktopGameAnalysis({
     awayBattingScore,
     homeBattingScore,
 
-    awayBattingStats,
-    homeBattingStats,
-
     awayFormScore,
     homeFormScore,
-
-    awayFormStats,
-    homeFormStats,
-
-    awayBullpenStats,
-    homeBullpenStats,
 
     awayBullpenScore,
     homeBullpenScore,
@@ -77,7 +79,6 @@ export default function DesktopGameAnalysis({
             GAME HEADER
         ========================= */}
         <section className="rounded-2xl border border-yellow-500/20 bg-zinc-900 p-8">
-
           <p className="text-sm font-bold text-yellow-400">
             MLB GAME ANALYSIS
           </p>
@@ -104,13 +105,20 @@ export default function DesktopGameAnalysis({
           </p>
 
           <div className="mt-10 grid grid-cols-[1fr_auto_1fr] gap-8">
-
             <TeamBox
               side="AWAY"
-              teamId={awayTeamId}
-              teamName={awayTeamName}
-              pitcher={awayPitcher}
-              score={awayPitcherScore}
+              teamId={
+                awayTeamId
+              }
+              teamName={
+                awayTeamName
+              }
+              pitcher={
+                awayPitcher
+              }
+              score={
+                awayPitcherScore
+              }
             />
 
             <div className="flex items-center text-5xl font-black text-yellow-400">
@@ -119,45 +127,67 @@ export default function DesktopGameAnalysis({
 
             <TeamBox
               side="HOME"
-              teamId={homeTeamId}
-              teamName={homeTeamName}
-              pitcher={homePitcher}
-              score={homePitcherScore}
+              teamId={
+                homeTeamId
+              }
+              teamName={
+                homeTeamName
+              }
+              pitcher={
+                homePitcher
+              }
+              score={
+                homePitcherScore
+              }
             />
-
           </div>
-
         </section>
 
         {/* =========================
             WIN PROBABILITY
         ========================= */}
         <WinProbabilityCard
-          awayTeamName={awayTeamName}
-          homeTeamName={homeTeamName}
+          awayTeamName={
+            awayTeamName
+          }
+          homeTeamName={
+            homeTeamName
+          }
           awayProbability={
-            winProbability.awayWinProbability
+            winProbability
+              .awayWinProbability
           }
           homeProbability={
-            winProbability.homeWinProbability
+            winProbability
+              .homeWinProbability
           }
-          isVip={membership.isVip}
+          isVip={
+            membership.isVip
+          }
         />
 
         {/* =========================
             VALUE SCORE
         ========================= */}
         <ValueScoreCard
-          score={valueScore.score}
-          grade={valueScore.grade}
-          isVip={membership.isVip}
+          score={
+            valueScore.score
+          }
+          grade={
+            valueScore.grade
+          }
+          isVip={
+            membership.isVip
+          }
         />
 
         {/* =========================
             BET ADVISOR
         ========================= */}
         <BetAdvisorCard
-          isVip={membership.isVip}
+          isVip={
+            membership.isVip
+          }
           recommendation={
             betAdvisor.recommendation
           }
@@ -179,18 +209,26 @@ export default function DesktopGameAnalysis({
           homeTeamName={
             homeTeamName
           }
+          selectedTeamName={
+            selectedTeamName
+          }
         />
 
         {/* =========================
             AI 最終建議
         ========================= */}
         <AIRecommendationCard
-          isVip={membership.isVip}
+          isVip={
+            membership.isVip
+          }
           awayTeamName={
             awayTeamName
           }
           homeTeamName={
             homeTeamName
+          }
+          selectedTeamName={
+            selectedTeamName
           }
           awayXsi={
             awayXsi
@@ -280,7 +318,6 @@ export default function DesktopGameAnalysis({
             marketScore
           }
         />
-
       </div>
     </main>
   );
@@ -293,16 +330,26 @@ function TeamBox({
   pitcher,
   score,
 }: any) {
+  const pitchScore =
+    Number(
+      score?.score ?? 0,
+    );
+
   return (
     <div className="rounded-2xl bg-zinc-800 p-6 text-center">
-
       <p className="text-sm text-zinc-400">
         {side}
       </p>
 
       <img
-        src={getMlbTeamLogo(teamId)}
-        alt={teamName}
+        src={
+          getMlbTeamLogo(
+            teamId,
+          )
+        }
+        alt={
+          teamName
+        }
         className="mx-auto mt-5 h-28 w-28 object-contain"
       />
 
@@ -311,21 +358,19 @@ function TeamBox({
       </h2>
 
       <div className="mt-6 rounded-xl bg-zinc-900 p-5">
-
         <p className="text-sm text-zinc-400">
           先發投手
         </p>
 
         <p className="mt-3 text-xl font-bold">
-          {pitcher?.fullName ?? "TBD"}
+          {pitcher?.fullName ??
+            "TBD"}
         </p>
 
         <p className="mt-5 text-4xl font-black text-yellow-400">
-          {score.score}
+          {pitchScore}
         </p>
-
       </div>
-
     </div>
   );
 }

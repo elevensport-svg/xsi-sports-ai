@@ -20,6 +20,8 @@ type PredictionHistory = {
   result: string;
   created_at: string;
   updated_at: string;
+  away_score: number | null;
+  home_score: number | null;
 };
 
 function getResultInfo(result: string) {
@@ -155,7 +157,9 @@ export default async function HistoryPage() {
           confidence,
           result,
           created_at,
-          updated_at
+          updated_at,
+          away_score,
+          home_score
         `,
       )
       .order(
@@ -246,9 +250,6 @@ export default async function HistoryPage() {
   const pushes =
     stats.pushes;
 
-  const pending =
-    stats.pending;
-
   /*
    * 走盤已結算，但不納入勝率分母。
    */
@@ -274,16 +275,6 @@ export default async function HistoryPage() {
 
   const yesterdayKey =
     getYesterdayKey();
-
-  const todayHistories =
-    validHistories.filter(
-      (item) =>
-        getTaiwanDateKey(
-          new Date(
-            item.created_at,
-          ),
-        ) === todayKey,
-    );
 
   const yesterdayHistories =
     validHistories.filter(
@@ -408,22 +399,6 @@ export default async function HistoryPage() {
 
         </div>
 
-        <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
-
-          <div className="flex items-center justify-between gap-4">
-
-            <p className="text-sm text-zinc-400">
-              尚未結算
-            </p>
-
-            <p className="font-black text-yellow-400">
-              {pending} 場
-            </p>
-
-          </div>
-
-        </div>
-
         {error ? (
           <div className="mt-10 rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
 
@@ -462,7 +437,7 @@ export default async function HistoryPage() {
 
             <HistoryGroup
               title="🌙 昨日預測"
-              subtitle="昨天建立的 XSI AI 預測"
+              subtitle="昨天已結算的 XSI AI 預測"
               histories={
                 yesterdayHistories
               }
@@ -470,7 +445,7 @@ export default async function HistoryPage() {
 
             <HistoryGroup
               title="📚 更早紀錄"
-              subtitle="兩天以前的歷史預測"
+              subtitle="兩天以前已結算的歷史預測"
               histories={
                 olderHistories
               }
@@ -607,8 +582,27 @@ function HistoryCard({
             </p>
           </div>
 
-          <div className="text-sm font-black text-yellow-400">
-            VS
+          <div className="min-w-[84px] text-center">
+            {history.away_score !== null &&
+            history.home_score !== null ? (
+              <>
+                <p className="whitespace-nowrap text-2xl font-black text-yellow-400 sm:text-3xl">
+                  {history.away_score}
+                  <span className="mx-2 text-zinc-600">
+                    -
+                  </span>
+                  {history.home_score}
+                </p>
+
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+                  FINAL
+                </p>
+              </>
+            ) : (
+              <p className="text-sm font-black text-yellow-400">
+                VS
+              </p>
+            )}
           </div>
 
           <div className="text-right">
@@ -739,19 +733,73 @@ function StatCard({
 function formatPrediction(
   prediction: string,
 ): string {
-  const value = prediction?.trim();
+  const value =
+    prediction?.trim() ?? "";
 
-  if (value === "Moneyline") {
-    return "獨贏";
+  if (!value) {
+    return "-";
   }
 
-  if (value === "Run Line") {
-    return "讓分";
+  /*
+   * ==========================================
+   * 新版完整格式
+   *
+   * 新版資料會直接包含球隊名稱，例如：
+   *
+   * 費城費城人 獨贏
+   * 洛杉磯道奇 讓分 -1.5
+   * 休士頓太空人 受讓 +1.5
+   *
+   * 這種資料直接顯示，不重新猜球隊。
+   * ==========================================
+   */
+
+  const normalized =
+    value.toLowerCase();
+
+  /*
+   * ==========================================
+   * 舊版只有玩法、沒有球隊名稱
+   *
+   * 不修改 Supabase 原始歷史資料，
+   * 也不猜當時推薦的是主隊還客隊。
+   *
+   * 只在歷史頁加上舊版標記。
+   * ==========================================
+   */
+
+  if (
+    normalized === "moneyline" ||
+    normalized === "money line" ||
+    value === "獨贏"
+  ) {
+    return "獨贏（舊版預測資料）";
   }
 
-  if (value === "Run Line +1.5") {
-    return "受讓 +1.5";
+  if (
+    normalized === "run line" ||
+    value === "讓分"
+  ) {
+    return "讓分（舊版預測資料）";
   }
 
-  return value || "-";
+  if (
+    normalized === "run line +1.5" ||
+    value === "受讓 +1.5"
+  ) {
+    return "受讓 +1.5（舊版預測資料）";
+  }
+
+  if (
+    normalized === "run line -1.5" ||
+    value === "讓分 -1.5"
+  ) {
+    return "讓分 -1.5（舊版預測資料）";
+  }
+
+  /*
+   * 其他已有文字內容的 prediction
+   * 保留原樣。
+   */
+  return value;
 }

@@ -607,8 +607,14 @@ export async function settleMlbPredictions(): Promise<SettleMlbPredictionsResult
           "prediction_history",
         )
         .update({
-          result,
-        })
+  result,
+
+  away_score:
+    finalScore.awayRuns,
+
+  home_score:
+    finalScore.homeRuns,
+})
         .eq(
           "id",
           prediction.id,

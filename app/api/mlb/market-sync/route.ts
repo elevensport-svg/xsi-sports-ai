@@ -1,4 +1,5 @@
 import {
+  NextRequest,
   NextResponse,
 } from "next/server";
 
@@ -61,11 +62,79 @@ function getMinutesSince(
 }
 
 /* ==========================================
-   GET /api/mlb/market-sync
+   盤口診斷資料
 ========================================== */
 
-export async function GET() {
+function buildMarketDiagnostics(
+  markets:
+    ReturnType<
+      typeof mapOddsGamesToMlbMarketData
+    >,
+) {
+  return markets.map(
+    (market) => ({
+      eventId:
+        market.eventId,
+
+      matchup:
+        `${market.awayTeam} vs ${market.homeTeam}`,
+
+      commenceTime:
+        market.commenceTime,
+
+      awayMoneyline:
+        market.consensus
+          .awayMoneyline,
+
+      homeMoneyline:
+        market.consensus
+          .homeMoneyline,
+
+      awaySpread:
+        market.consensus
+          .awaySpread,
+
+      homeSpread:
+        market.consensus
+          .homeSpread,
+
+      total:
+        market.consensus
+          .total,
+
+      bookmakerCount:
+        market.bookmakers.length,
+
+      spreadBookmakerCount:
+        market.bookmakers.filter(
+          (bookmaker) =>
+            bookmaker.spreads.length >
+            0,
+        ).length,
+    }),
+  );
+}
+
+/* ==========================================
+   GET /api/mlb/market-sync
+
+   正常：
+   /api/mlb/market-sync
+
+   強制：
+   /api/mlb/market-sync?force=1
+========================================== */
+
+export async function GET(
+  request:
+    NextRequest,
+) {
   try {
+    const force =
+      request.nextUrl.searchParams.get(
+        "force",
+      ) === "1";
+
     /*
      * ========================================
      * STEP 1
@@ -84,18 +153,26 @@ export async function GET() {
     /*
      * ========================================
      * STEP 2
-     * 6 小時內更新過
+     * 正常模式：
+     * 6 小時內更新過就跳過 Odds API
      *
-     * 不呼叫 Odds API
+     * force=1：
+     * 完全忽略這個限制
      * ========================================
      */
 
     if (
+      !force &&
       minutesSinceUpdate <
-      SYNC_INTERVAL_MINUTES
+        SYNC_INTERVAL_MINUTES
     ) {
       const cachedMarkets =
         await getAllCachedMlbMarkets();
+
+      const diagnostics =
+        buildMarketDiagnostics(
+          cachedMarkets,
+        );
 
       console.log(
         `⚾ MLB 盤口 ${Math.floor(
@@ -103,10 +180,17 @@ export async function GET() {
         )} 分鐘前已更新，本次跳過 Odds API`,
       );
 
+      console.log(
+        "📊 MLB 快取盤口診斷：",
+        diagnostics,
+      );
+
       return NextResponse.json({
         success: true,
 
         skipped: true,
+
+        forced: false,
 
         reason:
           "CACHE_FRESH",
@@ -126,6 +210,8 @@ export async function GET() {
 
         marketCount:
           cachedMarkets.length,
+
+        diagnostics,
       });
     }
 
@@ -141,14 +227,14 @@ export async function GET() {
     /*
      * ========================================
      * STEP 4
-     * 超過 6 小時
-     *
-     * 這裡才允許呼叫 Odds API
+     * 呼叫 Odds API
      * ========================================
      */
 
     console.log(
-      "⚾ MLB 盤口快取已過期，開始同步 Odds API...",
+      force
+        ? "🔥 MLB 強制同步啟動，忽略 6 小時快取..."
+        : "⚾ MLB 盤口快取已過期，開始同步 Odds API...",
     );
 
     const oddsGames =
@@ -175,6 +261,9 @@ export async function GET() {
 
           skipped: false,
 
+          forced:
+            force,
+
           reason:
             "NO_API_DATA",
 
@@ -197,9 +286,7 @@ export async function GET() {
     /*
      * ========================================
      * STEP 6
-     * Odds API 格式
-     * →
-     * XSI MlbMarketData 格式
+     * Odds API → XSI MlbMarketData
      * ========================================
      */
 
@@ -208,8 +295,50 @@ export async function GET() {
         oddsGames,
       );
 
+    const diagnostics =
+      buildMarketDiagnostics(
+        markets,
+      );
+
     console.log(
       `⚾ Odds API 取得 ${markets.length} 場 MLB 盤口`,
+    );
+
+    console.log(
+      "======================================",
+    );
+
+    console.log(
+      "📈 MLB Odds API Run Line 診斷",
+    );
+
+    for (
+      const item
+      of diagnostics
+    ) {
+      console.log(
+        `${item.matchup}`,
+      );
+
+      console.log(
+        `Moneyline：Away ${item.awayMoneyline ?? "null"} / Home ${item.homeMoneyline ?? "null"}`,
+      );
+
+      console.log(
+        `Run Line：Away ${item.awaySpread ?? "null"} / Home ${item.homeSpread ?? "null"}`,
+      );
+
+      console.log(
+        `Spread Books：${item.spreadBookmakerCount}/${item.bookmakerCount}`,
+      );
+
+      console.log(
+        "--------------------------------------",
+      );
+    }
+
+    console.log(
+      "======================================",
     );
 
     /*
@@ -233,6 +362,9 @@ export async function GET() {
 
           skipped: false,
 
+          forced:
+            force,
+
           reason:
             "DATABASE_ERROR",
 
@@ -243,6 +375,8 @@ export async function GET() {
             markets.length,
 
           saved: 0,
+
+          diagnostics,
 
           error:
             saveResult.error,
@@ -256,9 +390,20 @@ export async function GET() {
     /*
      * ========================================
      * STEP 8
-     * 完成
+     * 再讀一次 Supabase
+     *
+     * 確認 awaySpread / homeSpread
+     * 寫進去後仍然存在
      * ========================================
      */
+
+    const cachedMarkets =
+      await getAllCachedMlbMarkets();
+
+    const cacheDiagnostics =
+      buildMarketDiagnostics(
+        cachedMarkets,
+      );
 
     const syncedAt =
       new Date()
@@ -273,11 +418,19 @@ export async function GET() {
     );
 
     console.log(
+      `強制同步：${force ? "YES" : "NO"}`,
+    );
+
+    console.log(
       `取得：${markets.length} 場`,
     );
 
     console.log(
       `儲存：${saveResult.saved} 場`,
+    );
+
+    console.log(
+      `快取讀回：${cachedMarkets.length} 場`,
     );
 
     console.log(
@@ -289,11 +442,18 @@ export async function GET() {
 
       skipped: false,
 
+      forced:
+        force,
+
       reason:
-        "SYNC_COMPLETED",
+        force
+          ? "FORCE_SYNC_COMPLETED"
+          : "SYNC_COMPLETED",
 
       message:
-        "MLB 盤口同步完成。",
+        force
+          ? "MLB 盤口強制同步完成。"
+          : "MLB 盤口同步完成。",
 
       syncIntervalMinutes:
         SYNC_INTERVAL_MINUTES,
@@ -305,6 +465,16 @@ export async function GET() {
         saveResult.saved,
 
       syncedAt,
+
+      /*
+       * Odds API 原始轉換後
+       */
+      diagnostics,
+
+      /*
+       * 寫入 Supabase 後再讀回
+       */
+      cacheDiagnostics,
     });
   } catch (error) {
     console.error(
@@ -339,6 +509,11 @@ export async function GET() {
    POST
 ========================================== */
 
-export async function POST() {
-  return GET();
+export async function POST(
+  request:
+    NextRequest,
+) {
+  return GET(
+    request,
+  );
 }

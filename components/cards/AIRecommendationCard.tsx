@@ -18,6 +18,8 @@ type Props = {
   awayTeamName: string;
   homeTeamName: string;
 
+  selectedTeamName: string;
+
   awayXsi: TeamXsi;
   homeXsi: TeamXsi;
 
@@ -117,6 +119,8 @@ export default function AIRecommendationCard({
   awayTeamName,
   homeTeamName,
 
+  selectedTeamName,
+
   awayXsi,
   homeXsi,
 
@@ -175,21 +179,40 @@ export default function AIRecommendationCard({
     setSettingsLoaded(true);
   }, []);
 
-  const isTie =
-    awayXsi.total ===
-    homeXsi.total;
+  /*
+   * ==========================================
+   * 模型方向統一
+   *
+   * 不再由 AIRecommendationCard
+   * 自己比較 awayXsi / homeXsi 選隊。
+   *
+   * 最終方向直接使用
+   * mlbGameAnalysis.ts 已經算好的
+   * selectedTeamName。
+   * ==========================================
+   */
 
   const selectedTeam =
-    awayXsi.total >
-    homeXsi.total
-      ? awayTeamName
-      : homeTeamName;
+    selectedTeamName;
 
   const selectedXsi =
-    awayXsi.total >=
-    homeXsi.total
+    selectedTeamName ===
+    awayTeamName
       ? awayXsi
-      : homeXsi;
+      : selectedTeamName ===
+          homeTeamName
+        ? homeXsi
+        : awayXsi.total >=
+            homeXsi.total
+          ? awayXsi
+          : homeXsi;
+
+  /*
+   * 最終方向已由上游統一決定，
+   * 這裡不再使用 XSI total 判斷平手。
+   */
+  const isTie =
+    false;
 
   const scoreDifference =
     Math.abs(

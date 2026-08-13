@@ -362,14 +362,49 @@ export async function calculateMlbGameAnalysis(
     });
 
   /* ==========================================
-     10. 判斷 XSI 領先球隊
+     10. 統一模型方向
+
+     重要：
+     最終推薦球隊一律由 Win Probability 決定。
+
+     原本使用 XSI total 選隊，可能造成：
+     勝率模型看好 A 隊，
+     Bet Advisor 卻推薦 B 隊。
+
+     現在改成：
+     Win Probability
+     ↓
+     selectedTeamName
+     ↓
+     Value Score
+     ↓
+     Bet Advisor
+
+     若勝率剛好完全相同，
+     才使用 XSI total 作為 tie-break。
   ========================================== */
 
-  const leadingTeam =
-    awayXsi.total >=
-    homeXsi.total
-      ? "away"
-      : "home";
+  const awayWinProbability =
+    winProbability
+      .awayWinProbability;
+
+  const homeWinProbability =
+    winProbability
+      .homeWinProbability;
+
+  const leadingTeam:
+    | "away"
+    | "home" =
+    awayWinProbability ===
+    homeWinProbability
+      ? awayXsi.total >=
+        homeXsi.total
+        ? "away"
+        : "home"
+      : awayWinProbability >
+          homeWinProbability
+        ? "away"
+        : "home";
 
   const selectedTeamName =
     leadingTeam === "away"
@@ -381,6 +416,10 @@ export async function calculateMlbGameAnalysis(
       ? awayXsi
       : homeXsi;
 
+  /*
+   * XSI 差距保留作為資訊指標，
+   * 但不再拿它決定推薦哪一隊。
+   */
   const xsiDifference =
     Math.abs(
       awayXsi.total -
@@ -389,16 +428,28 @@ export async function calculateMlbGameAnalysis(
 
   const selectedWinProbability =
     leadingTeam === "away"
-      ? winProbability
-          .awayWinProbability
-      : winProbability
-          .homeWinProbability;
+      ? awayWinProbability
+      : homeWinProbability;
+
+  /*
+   * 真正用於投注方向強弱的差距。
+   * 因為推薦方向是 Win Probability 決定，
+   * 所以推薦強度也必須使用同一套方向來源。
+   */
+  const winProbabilityDifference =
+    Math.abs(
+      awayWinProbability -
+        homeWinProbability,
+    );
 
   /* ==========================================
      11. Value Score
 
-     改成使用模型真正看好的球隊，
-     不再固定使用客隊。
+     Value Score 仍保留：
+     50% XSI 綜合評分
+     50% 勝率模型
+
+     但兩者現在都針對同一支 selectedTeam。
   ========================================== */
 
   const valueScoreNumber =
@@ -426,7 +477,10 @@ export async function calculateMlbGameAnalysis(
   };
 
   /* ==========================================
-     12. 選擇領先球隊的資料
+     12. 選擇模型方向球隊的資料
+
+     所有 Bet Advisor 輸入
+     都跟著 Win Probability 選出的球隊。
   ========================================== */
 
   const selectedPitchScore =
@@ -465,6 +519,15 @@ export async function calculateMlbGameAnalysis(
           .homeSpread ??
         null;
 
+  console.log(`📈 MLB ${game.gamePk} 盤口診斷`, {
+    matchup: `${awayTeamName} VS ${homeTeamName}`,
+    selectedTeam: selectedTeamName,
+    awaySpread: marketData?.consensus.awaySpread ?? null,
+    homeSpread: marketData?.consensus.homeSpread ?? null,
+    selectedSpread,
+    marketAvailable: marketData !== null,
+  });
+
   /* ==========================================
      13. 基礎 Bet Advisor
   ========================================== */
@@ -491,13 +554,11 @@ export async function calculateMlbGameAnalysis(
     });
 
   /* ==========================================
-     14. XSI 差距決定投注類型
+     14. 投注玩法重新校正
 
-     不再使用：
-     分數低 = 受讓
-
-     改成：
-     XSI 差距 + 真實盤口
+     選隊仍由 Win Probability 決定。
+     Run Line 只負責決定獨贏 / 讓分 / 受讓。
+     不使用 EV 改變選隊，也不隨機分配玩法。
   ========================================== */
 
   let recommendation:
@@ -510,132 +571,154 @@ export async function calculateMlbGameAnalysis(
     ...baseBetAdvisor.reasons,
   ];
 
-  /*
-   * XSI 差距 >= 15
-   * 強勢優勢
-   */
+  const hasRealSpread =
+    selectedSpread !== null &&
+    Number.isFinite(Number(selectedSpread));
+
+  const normalizedSpread =
+    hasRealSpread
+      ? Number(selectedSpread)
+      : null;
+
+  // XSI 看好的球隊本身是市場受讓方：
+  // 只要有真實正盤，就優先使用 +1.5 保護。
   if (
-    xsiDifference >= 15
+    normalizedSpread !== null &&
+    normalizedSpread > 0
   ) {
-    if (
-      selectedSpread !==
-        null &&
-      selectedSpread <= -1
-    ) {
-      recommendation =
-        "讓分";
-
-      advisorReasons.push(
-        `XSI 領先 ${xsiDifference.toFixed(
-          1,
-        )} 分，模型優勢明顯，具備讓分條件`,
-      );
-    } else {
-      recommendation =
-        "獨贏";
-
-      advisorReasons.push(
-        `XSI 領先 ${xsiDifference.toFixed(
-          1,
-        )} 分，模型明顯看好 ${selectedTeamName}`,
-      );
-    }
-  }
-
-  /*
-   * XSI 差距 8～14.9
-   * 明顯優勢，以獨贏為主
-   */
-  else if (
-    xsiDifference >= 8
-  ) {
-    recommendation =
-      "獨贏";
+    recommendation = "受讓 +1.5";
 
     advisorReasons.push(
-      `XSI 領先 ${xsiDifference.toFixed(
-        1,
-      )} 分，建議以獨贏降低讓分風險`,
+      `${selectedTeamName} 為市場受讓方（Run Line +${normalizedSpread}），XSI 仍選為領先方向，優先使用 +1.5 保護`,
     );
   }
 
-  /*
-   * XSI 差距 4～7.9
-   * 小幅優勢
-   *
-   * 只有模型看好的球隊本身
-   * 確實拿到 +1 / +1.5 才考慮受讓
-   */
+  // XSI 看好的球隊是市場讓分方：
+  // 勝率 >= 58%，且勝率差 >= 8% 或 XSI 差 >= 5，才走 -1.5。
   else if (
-    xsiDifference >= 4
+    normalizedSpread !== null &&
+    normalizedSpread < 0 &&
+    selectedWinProbability >= 58 &&
+    (
+      winProbabilityDifference >= 8 ||
+      xsiDifference >= 5
+    )
   ) {
-    if (
-      selectedSpread !==
-        null &&
-      selectedSpread >= 1
-    ) {
-      recommendation =
-        "受讓 +1.5";
+    recommendation = "讓分";
 
-      advisorReasons.push(
-        `XSI 小幅領先 ${xsiDifference.toFixed(
-          1,
-        )} 分，同時取得受讓保護`,
-      );
-    } else {
-      recommendation =
-        "獨贏";
-
-      advisorReasons.push(
-        `XSI 小幅領先 ${xsiDifference.toFixed(
-          1,
-        )} 分，暫以獨贏方向評估`,
-      );
-    }
+    advisorReasons.push(
+      `${selectedTeamName} 為市場讓分方（Run Line ${normalizedSpread}），模型勝率 ${selectedWinProbability.toFixed(1)}% 且優勢足夠，評估讓分 -1.5`,
+    );
   }
 
-  /*
-   * XSI 差距 < 4
-   * 雙方非常接近
-   *
-   * 不再自動推薦受讓
-   */
+  // 有負盤，但模型優勢還不夠承擔 -1.5。
+  else if (
+    normalizedSpread !== null &&
+    normalizedSpread < 0
+  ) {
+    recommendation = "獨贏";
+
+    advisorReasons.push(
+      `${selectedTeamName} 雖為市場讓分方，但目前模型優勢不足以承擔 -1.5，保留獨贏`,
+    );
+  }
+
+  // Spread = 0，沒有明確讓受方向。
+  else if (normalizedSpread === 0) {
+    recommendation = "獨贏";
+
+    advisorReasons.push(
+      `${selectedTeamName} 目前 Run Line 無明確讓受方向，保留獨贏`,
+    );
+  }
+
+  // 沒有 Run Line 時不偽造受讓。
+  // 只有模型非常強勢才允許評估 -1.5。
+  else if (
+    selectedWinProbability >= 68 &&
+    winProbabilityDifference >= 20 &&
+    selectedXsi.total >= 70 &&
+    xsiDifference >= 10
+  ) {
+    recommendation = "讓分";
+
+    advisorReasons.push(
+      `${selectedTeamName} 暫無可用 Run Line，但模型勝率 ${selectedWinProbability.toFixed(1)}% 且 XSI 優勢明顯，以強勢 -1.5 方向評估`,
+    );
+  }
+
   else {
-    recommendation =
-      "獨贏";
+    recommendation = "獨贏";
 
     advisorReasons.push(
-      `XSI 僅相差 ${xsiDifference.toFixed(
-        1,
-      )} 分，雙方實力接近，投注優勢有限`,
+      `${selectedTeamName} 模型勝率 ${selectedWinProbability.toFixed(1)}%，目前缺乏足夠讓分依據，保留獨贏`,
     );
   }
+
+  console.log(`🎯 MLB ${game.gamePk} 最終玩法`, {
+    selectedTeam: selectedTeamName,
+    winProbability: Number(selectedWinProbability.toFixed(1)),
+    winProbabilityDifference: Number(winProbabilityDifference.toFixed(1)),
+    xsiScore: selectedXsi.total,
+    xsiDifference: Number(xsiDifference.toFixed(1)),
+    selectedSpread: normalizedSpread,
+    recommendation,
+  });
 
   /* ==========================================
      15. 信心度重新校正
 
-     除了球隊自身分數，
-     加入雙方 XSI 差距。
+     信心分數與玩法難度分開處理：
+
+     受讓 +1.5：
+     有保護，微幅加分。
+
+     讓分 -1.5：
+     過盤條件較嚴格，略微降分。
+
+     獨贏：
+     不額外調整。
   ========================================== */
 
   let confidenceBoost = 0;
 
   if (
-    xsiDifference >= 15
+    winProbabilityDifference >=
+    25
   ) {
     confidenceBoost = 8;
   } else if (
-    xsiDifference >= 10
+    winProbabilityDifference >=
+    15
   ) {
     confidenceBoost = 5;
   } else if (
-    xsiDifference >= 6
+    winProbabilityDifference >=
+    8
   ) {
     confidenceBoost = 2;
   } else if (
-    xsiDifference < 4
+    winProbabilityDifference <
+    4
   ) {
     confidenceBoost = -5;
+  }
+
+  let marketTypeAdjustment =
+    0;
+
+  if (
+    recommendation ===
+    "受讓 +1.5"
+  ) {
+    marketTypeAdjustment =
+      2;
+  } else if (
+    recommendation ===
+    "讓分"
+  ) {
+    marketTypeAdjustment =
+      -4;
   }
 
   const adjustedConfidence =
@@ -645,7 +728,8 @@ export async function calculateMlbGameAnalysis(
         95,
         Math.round(
           baseBetAdvisor.confidence +
-            confidenceBoost,
+            confidenceBoost +
+            marketTypeAdjustment,
         ),
       ),
     );
@@ -745,6 +829,7 @@ export async function calculateMlbGameAnalysis(
     /* 額外提供模型方向 */
     selectedTeamName,
     xsiDifference,
+    winProbabilityDifference,
 
     /* 列表排序使用 */
     summary: {
@@ -757,6 +842,8 @@ export async function calculateMlbGameAnalysis(
         selectedXsi.total,
 
       xsiDifference,
+
+      winProbabilityDifference,
 
       confidence:
         betAdvisor.confidence,
