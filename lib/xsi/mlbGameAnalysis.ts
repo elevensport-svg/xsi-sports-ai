@@ -519,12 +519,32 @@ export async function calculateMlbGameAnalysis(
           .homeSpread ??
         null;
 
+  const selectedMoneyline =
+    leadingTeam === "away"
+      ? marketData?.consensus.awayMoneyline ?? null
+      : marketData?.consensus.homeMoneyline ?? null;
+
+  const opponentXsi =
+    leadingTeam === "away"
+      ? homeXsi.total
+      : awayXsi.total;
+
+  const isXsiValueDog =
+    leadingTeam === "away" &&
+    selectedSpread !== null &&
+    Number(selectedSpread) > 0 &&
+    selectedMoneyline !== null &&
+    Number(selectedMoneyline) >= 100 &&
+    awayXsi.total > homeXsi.total;
+
   console.log(`📈 MLB ${game.gamePk} 盤口診斷`, {
     matchup: `${awayTeamName} VS ${homeTeamName}`,
     selectedTeam: selectedTeamName,
     awaySpread: marketData?.consensus.awaySpread ?? null,
     homeSpread: marketData?.consensus.homeSpread ?? null,
     selectedSpread,
+    selectedMoneyline,
+    isXsiValueDog,
     marketAvailable: marketData !== null,
   });
 
@@ -551,6 +571,17 @@ export async function calculateMlbGameAnalysis(
 
       spread:
         selectedSpread,
+
+      selectedSide:
+        leadingTeam,
+
+      moneyline:
+        selectedMoneyline,
+
+      xsi:
+        selectedXsi.total,
+
+      opponentXsi,
     });
 
   /* ==========================================
@@ -580,16 +611,27 @@ export async function calculateMlbGameAnalysis(
       ? Number(selectedSpread)
       : null;
 
-  // XSI 看好的球隊本身是市場受讓方：
-  // 只要有真實正盤，就優先使用 +1.5 保護。
+  // 第一優先：XSI Value Dog
   if (
-    normalizedSpread !== null &&
-    normalizedSpread > 0
+    isXsiValueDog &&
+    normalizedSpread !== null
   ) {
     recommendation = "受讓 +1.5";
 
     advisorReasons.push(
-      `${selectedTeamName} 為市場受讓方（Run Line +${normalizedSpread}），XSI 仍選為領先方向，優先使用 +1.5 保護`,
+      `${selectedTeamName} 符合 XSI Value Dog：客隊為市場受讓方、Moneyline ${selectedMoneyline}，且 Away XSI ${awayXsi.total.toFixed(1)} 高於 Home XSI ${homeXsi.total.toFixed(1)}，優先使用 +1.5 保護`,
+    );
+  }
+
+  // 一般正盤但不符合 Value Dog，不再自動推薦受讓。
+  else if (
+    normalizedSpread !== null &&
+    normalizedSpread > 0
+  ) {
+    recommendation = "獨贏";
+
+    advisorReasons.push(
+      `${selectedTeamName} 雖為市場受讓方，但未完整符合 XSI Value Dog 條件，保留獨贏`,
     );
   }
 
@@ -662,6 +704,8 @@ export async function calculateMlbGameAnalysis(
     xsiScore: selectedXsi.total,
     xsiDifference: Number(xsiDifference.toFixed(1)),
     selectedSpread: normalizedSpread,
+    selectedMoneyline,
+    isXsiValueDog,
     recommendation,
   });
 
@@ -708,8 +752,15 @@ export async function calculateMlbGameAnalysis(
     0;
 
   if (
+    isXsiValueDog &&
     recommendation ===
-    "受讓 +1.5"
+      "受讓 +1.5"
+  ) {
+    marketTypeAdjustment =
+      5;
+  } else if (
+    recommendation ===
+      "受讓 +1.5"
   ) {
     marketTypeAdjustment =
       2;
@@ -830,6 +881,8 @@ export async function calculateMlbGameAnalysis(
     selectedTeamName,
     xsiDifference,
     winProbabilityDifference,
+    isXsiValueDog,
+    selectedMoneyline,
 
     /* 列表排序使用 */
     summary: {
