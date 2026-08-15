@@ -1,464 +1,154 @@
-export type PredictionHistoryForStats = {
-  game_pk: string;
-  sport: string;
-  home_team: string;
-  away_team: string;
-  prediction: string;
-  result: string | null;
+type PredictionHistoryLike = {
+  game_pk?: string | number | null;
+  sport?: string | null;
+  home_team?: string | null;
+  away_team?: string | null;
+  prediction?: string | null;
+  result?: string | null;
 };
 
-export type PredictionHistoryStats = {
-  validRecords: number;
-
-  pending: number;
-
-  wins: number;
-
-  losses: number;
-
-  pushes: number;
-
-  settled: number;
-
-  ignored: number;
-
-  mlb: {
-    validRecords: number;
-    pending: number;
-    wins: number;
-    losses: number;
-    pushes: number;
-  };
-
-  football: {
-    validRecords: number;
-    pending: number;
-    wins: number;
-    losses: number;
-    pushes: number;
-  };
-};
-
-function normalize(
-  value: unknown,
-) {
-  return String(
-    value ?? "",
-  )
-    .trim()
-    .toLowerCase();
+function normalize(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
-function hasInvalidText(
-  value: string,
-) {
-  const text =
-    normalize(
-      value,
-    );
+function hasValidTeamName(value: unknown) {
+  const text = String(value ?? "").trim();
 
-  if (
-    !text
-  ) {
-    return true;
+  if (!text) {
+    return false;
   }
 
-  return (
-    text.includes(
-      "?",
-    ) ||
-    text.includes(
-      "test",
-    ) ||
-    text.includes(
-      "測試",
-    ) ||
-    text.includes(
-      "api???",
-    ) ||
-    text.includes(
-      "api-test",
-    )
+  const normalized = text.toLowerCase();
+
+  return ![
+    "test",
+    "unknown",
+    "undefined",
+    "null",
+    "-",
+  ].includes(normalized);
+}
+
+function hasValidGamePk(value: unknown) {
+  const text = String(value ?? "").trim();
+
+  if (!text) {
+    return false;
+  }
+
+  const normalized = text.toLowerCase();
+
+  return !(
+    normalized.includes("test") ||
+    normalized.includes("mock") ||
+    normalized.includes("fake")
   );
 }
 
-/* ==========================================
-   MLB Validation
-========================================== */
+function hasValidPrediction(value: unknown) {
+  const text = String(value ?? "").trim();
 
-function isRealMlbGamePk(
-  gamePk: string,
-) {
-  return /^\d+$/.test(
-    String(
-      gamePk ?? "",
-    ).trim(),
-  );
+  if (!text) {
+    return false;
+  }
+
+  const normalized = text.toLowerCase();
+
+  return ![
+    "test",
+    "undefined",
+    "null",
+    "-",
+  ].includes(normalized);
 }
 
 export function isValidMlbPrediction(
-  history:
-    PredictionHistoryForStats,
-) {
-  if (
-    normalize(
-      history.sport,
-    ) !==
-    "mlb"
-  ) {
-    return false;
-  }
-
-  if (
-    !isRealMlbGamePk(
-      history.game_pk,
-    )
-  ) {
-    return false;
-  }
-
-  if (
-    hasInvalidText(
-      history.home_team,
-    ) ||
-    hasInvalidText(
-      history.away_team,
-    )
-  ) {
-    return false;
-  }
-
-  if (
-    hasInvalidText(
-      history.prediction,
-    )
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-/* ==========================================
-   Football Validation
-========================================== */
-
-export function isValidFootballPrediction(
-  history:
-    PredictionHistoryForStats,
-) {
-  if (
-    normalize(
-      history.sport,
-    ) !==
-    "football"
-  ) {
-    return false;
-  }
-
-  if (
-    !String(
-      history.game_pk ??
-      "",
-    ).trim()
-  ) {
-    return false;
-  }
-
-  if (
-    hasInvalidText(
-      history.home_team,
-    ) ||
-    hasInvalidText(
-      history.away_team,
-    )
-  ) {
-    return false;
-  }
-
-  if (
-    hasInvalidText(
-      history.prediction,
-    )
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-/* ==========================================
-   Global Validation
-========================================== */
-
-export function isValidPrediction(
-  history:
-    PredictionHistoryForStats,
+  item: PredictionHistoryLike,
 ) {
   return (
-    isValidMlbPrediction(
-      history,
-    ) ||
-    isValidFootballPrediction(
-      history,
-    )
+    normalize(item.sport) === "mlb" &&
+    hasValidGamePk(item.game_pk) &&
+    hasValidTeamName(item.home_team) &&
+    hasValidTeamName(item.away_team) &&
+    hasValidPrediction(item.prediction)
   );
 }
 
-/* ==========================================
-   Result Parser
-========================================== */
-
-function getResultType(
-  result:
-    string | null,
-):
-  | "pending"
-  | "win"
-  | "loss"
-  | "push"
-  | "invalid" {
-  const value =
-    normalize(
-      result,
-    );
-
-  if (
-    value ===
-      "pending" ||
-    value ===
-      ""
-  ) {
-    return "pending";
-  }
-
-  if (
-    [
-      "win",
-      "won",
-      "correct",
-    ].includes(
-      value,
-    )
-  ) {
-    return "win";
-  }
-
-  if (
-    [
-      "loss",
-      "lose",
-      "lost",
-      "wrong",
-    ].includes(
-      value,
-    )
-  ) {
-    return "loss";
-  }
-
-  if (
-    [
-      "push",
-      "void",
-      "draw",
-    ].includes(
-      value,
-    )
-  ) {
-    return "push";
-  }
-
-  return "invalid";
+function isWin(result: unknown) {
+  return [
+    "win",
+    "won",
+    "correct",
+  ].includes(normalize(result));
 }
 
-/* ==========================================
-   Main Stats
-========================================== */
+function isLoss(result: unknown) {
+  return [
+    "loss",
+    "lose",
+    "lost",
+    "wrong",
+  ].includes(normalize(result));
+}
+
+function isPush(result: unknown) {
+  return [
+    "push",
+    "void",
+  ].includes(normalize(result));
+}
+
+function isPending(result: unknown) {
+  const normalized = normalize(result);
+
+  return (
+    !normalized ||
+    normalized === "pending"
+  );
+}
 
 export function getPredictionHistoryStats(
-  histories:
-    PredictionHistoryForStats[],
-): PredictionHistoryStats {
-  let pending =
-    0;
+  rows: PredictionHistoryLike[],
+) {
+  const validRows = rows.filter(
+    isValidMlbPrediction,
+  );
 
-  let wins =
-    0;
+  let wins = 0;
+  let losses = 0;
+  let pending = 0;
+  let pushes = 0;
 
-  let losses =
-    0;
-
-  let pushes =
-    0;
-
-  let ignored =
-    0;
-
-  const mlb = {
-    validRecords:
-      0,
-
-    pending:
-      0,
-
-    wins:
-      0,
-
-    losses:
-      0,
-
-    pushes:
-      0,
-  };
-
-  const football = {
-    validRecords:
-      0,
-
-    pending:
-      0,
-
-    wins:
-      0,
-
-    losses:
-      0,
-
-    pushes:
-      0,
-  };
-
-  for (
-    const history
-    of histories
-  ) {
-    const sport =
-      normalize(
-        history.sport,
-      );
-
-    const isMlb =
-      isValidMlbPrediction(
-        history,
-      );
-
-    const isFootball =
-      isValidFootballPrediction(
-        history,
-      );
-
-    if (
-      !isMlb &&
-      !isFootball
-    ) {
-      ignored +=
-        1;
-
+  for (const row of validRows) {
+    if (isWin(row.result)) {
+      wins += 1;
       continue;
     }
 
-    const result =
-      getResultType(
-        history.result,
-      );
-
-    if (
-      result ===
-      "invalid"
-    ) {
-      ignored +=
-        1;
-
+    if (isLoss(row.result)) {
+      losses += 1;
       continue;
     }
 
-    if (
-      result ===
-      "pending"
-    ) {
-      pending +=
-        1;
-    } else if (
-      result ===
-      "win"
-    ) {
-      wins +=
-        1;
-    } else if (
-      result ===
-      "loss"
-    ) {
-      losses +=
-        1;
-    } else if (
-      result ===
-      "push"
-    ) {
-      pushes +=
-        1;
+    if (isPush(row.result)) {
+      pushes += 1;
+      continue;
     }
 
-    const bucket =
-      sport ===
-      "mlb"
-        ? mlb
-        : football;
-
-    bucket.validRecords +=
-      1;
-
-    if (
-      result ===
-      "pending"
-    ) {
-      bucket.pending +=
-        1;
-    } else if (
-      result ===
-      "win"
-    ) {
-      bucket.wins +=
-        1;
-    } else if (
-      result ===
-      "loss"
-    ) {
-      bucket.losses +=
-        1;
-    } else if (
-      result ===
-      "push"
-    ) {
-      bucket.pushes +=
-        1;
+    if (isPending(row.result)) {
+      pending += 1;
     }
   }
 
   return {
-    validRecords:
-      pending +
-      wins +
-      losses +
-      pushes,
-
-    pending,
-
+    validRecords: validRows.length,
     wins,
-
     losses,
-
+    pending,
     pushes,
-
     settled:
       wins +
       losses +
       pushes,
-
-    ignored,
-
-    mlb,
-
-    football,
   };
 }

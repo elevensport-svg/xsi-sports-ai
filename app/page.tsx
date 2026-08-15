@@ -8,14 +8,9 @@ import { getCurrentUserMembership } from "../lib/membership";
 import { createAdminClient } from "../lib/supabase/admin";
 
 import {
-  settleMlbPredictions,
-} from "../lib/prediction/settleMlbPredictions";
-
-
-import {
   getPredictionHistoryStats,
   isValidMlbPrediction,
-} from "../lib/prediction/historyStats";
+} from "@/lib/prediction/historyStats";
 
 import {
   getSportsNews,
@@ -147,6 +142,89 @@ function isPendingPrediction(
   );
 }
 
+function isValidFreePick(
+  item: PredictionHistory,
+) {
+  const sport =
+    String(
+      item.sport ?? "",
+    )
+      .trim()
+      .toUpperCase();
+
+  if (
+    sport !== "MLB" &&
+    sport !== "FOOTBALL"
+  ) {
+    return false;
+  }
+
+  if (
+    !isPendingPrediction(
+      item.result,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !normalizePredictionText(
+      item.prediction,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    sport === "MLB"
+  ) {
+    return (
+      isValidMlbPrediction(
+        item,
+      ) &&
+      predictionHasTeamName(
+        item,
+      )
+    );
+  }
+
+  return Boolean(
+    normalizePredictionText(
+      item.home_team,
+    ) &&
+    normalizePredictionText(
+      item.away_team,
+    ),
+  );
+}
+
+function getFreePickHref(
+  item: PredictionHistory,
+) {
+  const sport =
+    String(
+      item.sport ?? "",
+    )
+      .trim()
+      .toUpperCase();
+
+  if (
+    sport === "FOOTBALL"
+  ) {
+    return `/football/${encodeURIComponent(
+      String(
+        item.game_pk,
+      ),
+    )}`;
+  }
+
+  return `/mlb/${encodeURIComponent(
+    String(
+      item.game_pk,
+    ),
+  )}`;
+}
+
 function getTaiwanCreatedDateKey(
   createdAt: string,
 ) {
@@ -183,21 +261,7 @@ export default async function Home() {
    * MLB 自動結算
    * ==========================================
    */
-  try {
-    const settlement =
-      await settleMlbPredictions();
-
-    console.log(
-      "首頁 MLB 自動結算結果:",
-      settlement,
-    );
-  } catch (error) {
-    console.error(
-      "首頁 MLB 自動結算失敗:",
-      error,
-    );
-  }
-
+  
   /*
    * ==========================================
    * 足球自動結算
@@ -238,6 +302,9 @@ export default async function Home() {
         {
           ascending: false,
         },
+      )
+      .limit(
+        500,
       ),
 
     getSportsNews(),
@@ -345,34 +412,27 @@ export default async function Home() {
    * ==========================================
    * 今日免費精選
    *
-   * 只使用：
-   * - MLB
+   * MLB + FOOTBALL 都可入選。
+   * 只挑：
    * - pending
    * - 有效 prediction
-   * - prediction 已包含明確球隊名稱
    *
    * 先鎖定最新一批建立日期，
-   * 再從該批挑最高信心，
-   * 避免從舊歷史資料抓到只有「獨贏」
-   * 或「受讓 +1.5」的舊格式。
+   * 再從該批挑 confidence 最高的一場。
+   * MLB 若今日沒有合適資料，
+   * 足球會自動補上，不再顯示空白。
    * ==========================================
    */
-  const pendingMlbPredictions =
+  const pendingFreePickCandidates =
     histories.filter(
       (item) =>
-        isValidMlbPrediction(
-          item,
-        ) &&
-        isPendingPrediction(
-          item.result,
-        ) &&
-        predictionHasTeamName(
+        isValidFreePick(
           item,
         ),
     );
 
   const latestPendingDateKey =
-    pendingMlbPredictions
+    pendingFreePickCandidates
       .map(
         (item) =>
           getTaiwanCreatedDateKey(
@@ -383,19 +443,19 @@ export default async function Home() {
       .sort()
       .at(-1) ?? "";
 
-  const latestPendingMlbPredictions =
+  const latestPendingCandidates =
     latestPendingDateKey
-      ? pendingMlbPredictions.filter(
+      ? pendingFreePickCandidates.filter(
           (item) =>
             getTaiwanCreatedDateKey(
               item.created_at,
             ) ===
             latestPendingDateKey,
         )
-      : pendingMlbPredictions;
+      : pendingFreePickCandidates;
 
   const freePick =
-    [...latestPendingMlbPredictions]
+    [...latestPendingCandidates]
       .sort(
         (a, b) => {
           const confidenceDiff =
@@ -747,7 +807,9 @@ export default async function Home() {
                     </div>
 
                     <Link
-                      href={`/mlb/${freePick.game_pk}`}
+                      href={getFreePickHref(
+                        freePick,
+                      )}
                       className="mt-5 flex w-full items-center justify-center rounded-xl bg-yellow-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-yellow-300"
                     >
                       查看完整免費分析 →
@@ -818,13 +880,19 @@ export default async function Home() {
                 <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
 
                   {latestNews.map(
-                    (article) => (
+                    (
+                      article,
+                      index,
+                    ) => (
                       <NewsCard
                         key={
                           article.id
                         }
                         article={
                           article
+                        }
+                        priority={
+                          index === 0
                         }
                       />
                     ),
@@ -897,8 +965,10 @@ function StatCard({
 
 function NewsCard({
   article,
+  priority = false,
 }: {
   article: SportsNewsItem;
+  priority?: boolean;
 }) {
   return (
     <a
@@ -922,6 +992,9 @@ function NewsCard({
             }
             fill
             unoptimized
+            priority={
+              priority
+            }
             className="object-cover transition duration-300 group-hover:scale-105"
           />
         ) : (

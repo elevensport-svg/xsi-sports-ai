@@ -1142,6 +1142,18 @@ export default async function FootballPage({
 
                       </div>
 
+                      {/* =========================
+                          FULL ANALYSIS BUTTON
+                      ========================= */}
+                      {prediction && canViewPrediction && (
+                        <Link
+                          href={`/football/${encodeURIComponent(gameId)}`}
+                          className="mt-4 flex w-full items-center justify-center rounded-xl border border-yellow-500/30 bg-yellow-400 px-4 py-3 text-sm font-black text-black transition hover:bg-yellow-300"
+                        >
+                          查看完整分析 →
+                        </Link>
+                      )}
+
                     </div>
 
                   </div>

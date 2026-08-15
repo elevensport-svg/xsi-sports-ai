@@ -23,6 +23,10 @@ type GenerateOptions = {
   force?: boolean;
 };
 
+type PredictionMode =
+  | "XSI"
+  | "MARKET";
+
 type BatchFootballPredictionResult = {
   scheduleCount: number;
 
@@ -44,6 +48,10 @@ type BatchFootballPredictionResult = {
 
   historyCount: number;
 
+  xsiModeCount: number;
+
+  marketModeCount: number;
+
   force: boolean;
 
   errors: Array<{
@@ -64,6 +72,71 @@ type UnknownRecord =
     string,
     unknown
   >;
+
+type FootballHistoryRow =
+  FootballHistoryMatch & {
+    league: string;
+  };
+
+type MarketProbability = {
+  home: number;
+  draw: number;
+  away: number;
+};
+
+type MarketRecommendation = {
+  text: string;
+  confidence: number;
+};
+
+/* ==========================================
+   五大聯賽正式預測模式
+
+   回測結果：
+   英超 → MARKET
+   西甲 → MARKET
+   義甲 → MARKET
+   德甲 → XSI
+   法甲 → MARKET
+
+   歐冠 / 歐霸尚未完成同等回測，
+   暫時保留原本 XSI 流程。
+========================================== */
+
+const LEAGUE_PREDICTION_MODE:
+  Record<
+    string,
+    PredictionMode
+  > = {
+  英超:
+    "MARKET",
+
+  西甲:
+    "MARKET",
+
+  義甲:
+    "MARKET",
+
+  德甲:
+    "XSI",
+
+  法甲:
+    "MARKET",
+
+  歐冠:
+    "XSI",
+
+  歐霸:
+    "XSI",
+};
+
+const HISTORY_LEAGUES = [
+  "英超",
+  "西甲",
+  "義甲",
+  "德甲",
+  "法甲",
+];
 
 /* ==========================================
    Helpers
@@ -171,17 +244,222 @@ function getGameKickoff(
   return null;
 }
 
+function getPredictionMode(
+  leagueShortName:
+    string,
+): PredictionMode {
+  return (
+    LEAGUE_PREDICTION_MODE[
+      leagueShortName
+    ] ??
+    "XSI"
+  );
+}
+
 /* ==========================================
-   Load All Football History
+   Market Odds → 去水後 1X2 機率
+========================================== */
+
+function impliedProbability(
+  odds:
+    number | null,
+) {
+  if (
+    odds === null ||
+    !Number.isFinite(
+      odds,
+    ) ||
+    odds <= 1
+  ) {
+    return 0;
+  }
+
+  return 1 / odds;
+}
+
+function getMarketProbability({
+  homeOdds,
+  drawOdds,
+  awayOdds,
+}: {
+  homeOdds:
+    number | null;
+
+  drawOdds:
+    number | null;
+
+  awayOdds:
+    number | null;
+}): MarketProbability {
+  const home =
+    impliedProbability(
+      homeOdds,
+    );
+
+  const draw =
+    impliedProbability(
+      drawOdds,
+    );
+
+  const away =
+    impliedProbability(
+      awayOdds,
+    );
+
+  const total =
+    home +
+    draw +
+    away;
+
+  if (
+    total <= 0
+  ) {
+    return {
+      home:
+        33.3,
+
+      draw:
+        33.4,
+
+      away:
+        33.3,
+    };
+  }
+
+  return {
+    home:
+      Number(
+        (
+          home /
+          total *
+          100
+        ).toFixed(
+          1,
+        ),
+      ),
+
+    draw:
+      Number(
+        (
+          draw /
+          total *
+          100
+        ).toFixed(
+          1,
+        ),
+      ),
+
+    away:
+      Number(
+        (
+          away /
+          total *
+          100
+        ).toFixed(
+          1,
+        ),
+      ),
+  };
+}
+
+function buildMarketRecommendation({
+  homeTeam,
+  awayTeam,
+  homeOdds,
+  drawOdds,
+  awayOdds,
+}: {
+  homeTeam:
+    string;
+
+  awayTeam:
+    string;
+
+  homeOdds:
+    number | null;
+
+  drawOdds:
+    number | null;
+
+  awayOdds:
+    number | null;
+}): MarketRecommendation {
+  const probability =
+    getMarketProbability({
+      homeOdds,
+      drawOdds,
+      awayOdds,
+    });
+
+  const candidates = [
+    {
+      side:
+        "home" as const,
+
+      probability:
+        probability.home,
+
+      text:
+        `${homeTeam} 主勝`,
+    },
+
+    {
+      side:
+        "draw" as const,
+
+      probability:
+        probability.draw,
+
+      text:
+        "和局",
+    },
+
+    {
+      side:
+        "away" as const,
+
+      probability:
+        probability.away,
+
+      text:
+        `${awayTeam} 客勝`,
+    },
+  ].sort(
+    (
+      a,
+      b,
+    ) =>
+      b.probability -
+      a.probability,
+  );
+
+  const best =
+    candidates[0];
+
+  return {
+    text:
+      best.text,
+
+    confidence:
+      Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(
+            best.probability,
+          ),
+        ),
+      ),
+  };
+}
+
+/* ==========================================
+   Load All Five-League Football History
+
+   不再只讀西甲。
 
    Supabase 常見單次最多回 1000 rows，
    所以這裡用 range() 分頁讀取。
-
-   會讀到：
-   2023/24
-   2024/25
-   2025/26
-   ...
 ========================================== */
 
 async function loadAllFootballHistory(
@@ -197,7 +475,7 @@ async function loadAllFootballHistory(
     0;
 
   const history:
-    FootballHistoryMatch[] =
+    FootballHistoryRow[] =
     [];
 
   while (
@@ -218,6 +496,7 @@ async function loadAllFootballHistory(
         )
         .select(
           [
+            "league",
             "match_date",
             "home_team",
             "away_team",
@@ -227,9 +506,9 @@ async function loadAllFootballHistory(
             ",",
           ),
         )
-        .eq(
+        .in(
           "league",
-          "西甲",
+          HISTORY_LEAGUES,
         )
         .eq(
           "status",
@@ -259,7 +538,7 @@ async function loadAllFootballHistory(
       (
         data ??
         []
-      ) as unknown as FootballHistoryMatch[];
+      ) as unknown as FootballHistoryRow[];
 
     history.push(
       ...rows,
@@ -277,6 +556,64 @@ async function loadAllFootballHistory(
   }
 
   return history;
+}
+
+function groupHistoryByLeague(
+  history:
+    FootballHistoryRow[],
+) {
+  const map =
+    new Map<
+      string,
+      FootballHistoryMatch[]
+    >();
+
+  for (
+    const row
+    of history
+  ) {
+    const league =
+      String(
+        row.league ??
+          "",
+      ).trim();
+
+    if (
+      !league
+    ) {
+      continue;
+    }
+
+    const existing =
+      map.get(
+        league,
+      ) ??
+      [];
+
+    existing.push({
+      match_date:
+        row.match_date,
+
+      home_team:
+        row.home_team,
+
+      away_team:
+        row.away_team,
+
+      home_score:
+        row.home_score,
+
+      away_score:
+        row.away_score,
+    });
+
+    map.set(
+      league,
+      existing,
+    );
+  }
+
+  return map;
 }
 
 /* ==========================================
@@ -324,6 +661,12 @@ export async function generateTomorrowFootballPredictions(
     historyCount:
       0,
 
+    xsiModeCount:
+      0,
+
+    marketModeCount:
+      0,
+
     force,
 
     errors:
@@ -364,16 +707,21 @@ export async function generateTomorrowFootballPredictions(
 
   /* ==========================================
      STEP 2
-     Load Full History
+     Load Five-League History
   ========================================== */
 
   console.log(
-    "📚 載入 football_match_history...",
+    "📚 載入五大聯賽 football_match_history...",
   );
 
   const footballHistory =
     await loadAllFootballHistory(
       supabase,
+    );
+
+  const footballHistoryByLeague =
+    groupHistoryByLeague(
+      footballHistory,
     );
 
   summary.historyCount =
@@ -382,6 +730,18 @@ export async function generateTomorrowFootballPredictions(
   console.log(
     `📚 football_match_history：${footballHistory.length} 場`,
   );
+
+  for (
+    const [
+      league,
+      history,
+    ]
+    of footballHistoryByLeague
+  ) {
+    console.log(
+      `📚 ${league}：${history.length} 場`,
+    );
+  }
 
   /* ==========================================
      STEP 3
@@ -525,12 +885,31 @@ export async function generateTomorrowFootballPredictions(
         "--------------------------------------",
       );
 
+      const gameLeague =
+        String(
+          game.leagueShortName ??
+            "",
+        ).trim();
+
+      const predictionMode =
+        getPredictionMode(
+          gameLeague,
+        );
+
       console.log(
-        `⚽ 開始 XSI 分析 ${gameId}：${game.awayTeam} VS ${game.homeTeam}`,
+        `⚽ 開始分析 ${gameId}：${game.awayTeam} VS ${game.homeTeam}`,
+      );
+
+      console.log(
+        `🏆 聯賽：${gameLeague || "未知"}｜正式模式：${predictionMode}`,
       );
 
       /* ======================================
-         Original XSI Model
+         Original XSI Analysis
+
+         即使正式模式是 MARKET，
+         仍保留完整 XSI 分析資料，
+         供頁面分析與德甲 XSI 使用。
       ====================================== */
 
       const analysis =
@@ -541,37 +920,37 @@ export async function generateTomorrowFootballPredictions(
       summary.analyzed +=
         1;
 
-      const baseRecommendation =
+      const xsiRecommendation =
         String(
           analysis.recommendation
             ?.text ??
             "",
         ).trim();
 
-      const confidenceRaw =
+      const xsiConfidenceRaw =
         Number(
           analysis.recommendation
             ?.confidence ??
             0,
         );
 
-      const confidence =
+      const xsiConfidence =
         Number.isFinite(
-          confidenceRaw,
+          xsiConfidenceRaw,
         )
           ? Math.max(
               0,
               Math.min(
                 100,
                 Math.round(
-                  confidenceRaw,
+                  xsiConfidenceRaw,
                 ),
               ),
             )
           : 0;
 
       if (
-        !baseRecommendation
+        !xsiRecommendation
       ) {
         throw new Error(
           "足球分析沒有產生推薦",
@@ -580,7 +959,77 @@ export async function generateTomorrowFootballPredictions(
 
       /* ======================================
          STEP 7
+         League Strategy
+
+         MARKET：
+         用 1X2 Odds 去水後市場機率決定推薦。
+
+         XSI：
+         使用原 calculateFootballGameAnalysis 推薦。
+      ====================================== */
+
+      const marketRecommendation =
+        buildMarketRecommendation({
+          homeTeam:
+            game.homeTeam,
+
+          awayTeam:
+            game.awayTeam,
+
+          homeOdds:
+            analysis.market
+              .homeWinOdds,
+
+          drawOdds:
+            analysis.market
+              .drawOdds,
+
+          awayOdds:
+            analysis.market
+              .awayWinOdds,
+        });
+
+      let recommendation =
+        xsiRecommendation;
+
+      let confidence =
+        xsiConfidence;
+
+      if (
+        predictionMode ===
+        "MARKET"
+      ) {
+        recommendation =
+          marketRecommendation.text;
+
+        confidence =
+          marketRecommendation.confidence;
+
+        summary.marketModeCount +=
+          1;
+      } else {
+        summary.xsiModeCount +=
+          1;
+      }
+
+      console.log(
+        `🤖 XSI Recommendation：${xsiRecommendation} (${xsiConfidence})`,
+      );
+
+      console.log(
+        `📈 Market Recommendation：${marketRecommendation.text} (${marketRecommendation.confidence})`,
+      );
+
+      console.log(
+        `✅ Official Recommendation：${recommendation}｜Mode ${predictionMode}`,
+      );
+
+      /* ======================================
+         STEP 8
          Totals Production Model
+
+         每場只能使用「自己的聯賽歷史」，
+         不再全部拿西甲歷史計算。
 
          OVER >= 65%
          UNDER >= 56%
@@ -601,86 +1050,104 @@ export async function generateTomorrowFootballPredictions(
       if (
         kickoff
       ) {
-        const totals =
-          calculateFootballTotalsPrediction({
-            homeTeam:
-              game.homeTeam,
-
-            awayTeam:
-              game.awayTeam,
-
-            kickoff,
-
-            history:
-              footballHistory,
-          });
+        const leagueHistory =
+          footballHistoryByLeague.get(
+            gameLeague,
+          ) ??
+          [];
 
         if (
-          totals.qualified
+          leagueHistory.length ===
+          0
         ) {
-          totalsText =
-            totals.recommendation;
-
-          totalsConfidence =
-            Number.isFinite(
-              totals.confidence,
-            )
-              ? Math.max(
-                  0,
-                  Math.min(
-                    100,
-                    Math.round(
-                      totals.confidence,
-                    ),
-                  ),
-                )
-              : null;
-
-          summary.totalsQualified +=
-            1;
-
-          console.log(
-            `📊 Totals：${totals.recommendation}`,
-          );
-
-          console.log(
-            `🎯 Totals Confidence：${totals.confidence}%`,
-          );
-
-          console.log(
-            `⚽ Expected Goals：${totals.expectedHomeGoals} - ${totals.expectedAwayGoals}`,
-          );
-
-          console.log(
-            `📈 Expected Total：${totals.expectedTotal}`,
-          );
-
-          console.log(
-            `🔺 OVER：${Math.round(
-              totals.overProbability *
-                1000,
-            ) /
-              10}%`,
-          );
-
-          console.log(
-            `🔻 UNDER：${Math.round(
-              totals.underProbability *
-                1000,
-            ) /
-              10}%`,
-          );
-        } else {
           summary.totalsPassed +=
             1;
 
           console.log(
-            "⏭️ Totals：PASS",
+            `⏭️ Totals：PASS｜${gameLeague || "未知聯賽"} 沒有歷史資料`,
           );
+        } else {
+          const totals =
+            calculateFootballTotalsPrediction({
+              homeTeam:
+                game.homeTeam,
 
-          console.log(
-            `📈 Expected Total：${totals.expectedTotal}`,
-          );
+              awayTeam:
+                game.awayTeam,
+
+              kickoff,
+
+              history:
+                leagueHistory,
+            });
+
+          if (
+            totals.qualified
+          ) {
+            totalsText =
+              totals.recommendation;
+
+            totalsConfidence =
+              Number.isFinite(
+                totals.confidence,
+              )
+                ? Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      Math.round(
+                        totals.confidence,
+                      ),
+                    ),
+                  )
+                : null;
+
+            summary.totalsQualified +=
+              1;
+
+            console.log(
+              `📊 Totals：${totals.recommendation}`,
+            );
+
+            console.log(
+              `🎯 Totals Confidence：${totals.confidence}%`,
+            );
+
+            console.log(
+              `⚽ Expected Goals：${totals.expectedHomeGoals} - ${totals.expectedAwayGoals}`,
+            );
+
+            console.log(
+              `📈 Expected Total：${totals.expectedTotal}`,
+            );
+
+            console.log(
+              `🔺 OVER：${Math.round(
+                totals.overProbability *
+                  1000,
+              ) /
+                10}%`,
+            );
+
+            console.log(
+              `🔻 UNDER：${Math.round(
+                totals.underProbability *
+                  1000,
+              ) /
+                10}%`,
+            );
+          } else {
+            summary.totalsPassed +=
+              1;
+
+            console.log(
+              "⏭️ Totals：PASS",
+            );
+
+            console.log(
+              `📈 Expected Total：${totals.expectedTotal}`,
+            );
+          }
         }
       } else {
         summary.totalsPassed +=
@@ -690,18 +1157,6 @@ export async function generateTomorrowFootballPredictions(
           `⚠️ ${gameId} 找不到 kickoff，Totals PASS`,
         );
       }
-
-      /* ======================================
-         STEP 8
-         Final Recommendation
-      ====================================== */
-
-      const recommendation =
-        baseRecommendation;
-
-      console.log(
-        `🤖 XSI Recommendation：${recommendation}`,
-      );
 
       console.log(
         `⚽ Totals Recommendation：${totalsText || "PASS"}`,
@@ -756,7 +1211,6 @@ export async function generateTomorrowFootballPredictions(
 
               totals_confidence:
                 totalsConfidence,
-
             })
             .eq(
               "game_pk",
@@ -773,7 +1227,7 @@ export async function generateTomorrowFootballPredictions(
           1;
 
         console.log(
-          `♻️ 足球 ${gameId} 更新成功：${recommendation}｜Totals ${totalsText || "PASS"}`,
+          `♻️ 足球 ${gameId} 更新成功：${recommendation}｜Mode ${predictionMode}｜Totals ${totalsText || "PASS"}`,
         );
 
         continue;
@@ -844,7 +1298,7 @@ export async function generateTomorrowFootballPredictions(
         1;
 
       console.log(
-        `✅ 足球 ${gameId} 新增成功：${recommendation}｜XSI ${confidence}｜Totals ${totalsText || "PASS"} ${totalsConfidence ?? ""}`,
+        `✅ 足球 ${gameId} 新增成功：${recommendation}｜Mode ${predictionMode}｜Confidence ${confidence}｜Totals ${totalsText || "PASS"} ${totalsConfidence ?? ""}`,
       );
     } catch (
       error
@@ -913,6 +1367,14 @@ export async function generateTomorrowFootballPredictions(
 
   console.log(
     `成功更新：${summary.updated}`,
+  );
+
+  console.log(
+    `📈 MARKET Mode：${summary.marketModeCount}`,
+  );
+
+  console.log(
+    `🤖 XSI Mode：${summary.xsiModeCount}`,
   );
 
   console.log(
