@@ -16,10 +16,15 @@ export default function GameAnalysis({
 
   return (
     <>
-      {/* 回上一頁 */}
+      {/* ======================================
+          可愛版回上一頁
+      ====================================== */}
+
       <button
         type="button"
-        onClick={() => router.back()}
+        onClick={() =>
+          router.back()
+        }
         className="
           fixed
           left-4
@@ -28,35 +33,68 @@ export default function GameAnalysis({
           flex
           items-center
           gap-2
-          rounded-xl
+          rounded-full
           border
-          border-zinc-700
-          bg-zinc-900/95
-          px-4
-          py-2.5
+          border-[#eadcc8]
+          bg-white/95
+          px-3
+          py-2
           text-sm
-          font-bold
-          text-white
-          shadow-lg
-          backdrop-blur
+          font-black
+          text-[#6f645c]
+          shadow-[0_8px_22px_rgba(95,75,55,0.12)]
+          backdrop-blur-xl
           transition
-          hover:border-yellow-400
-          hover:bg-zinc-800
-          hover:text-yellow-400
+          duration-200
+          hover:-translate-y-0.5
+          hover:border-[#ffc94a]
+          hover:bg-[#fff9e8]
+          hover:text-[#a56e14]
+          sm:px-4
+          sm:py-2.5
         "
       >
-        <span className="text-lg">←</span>
-        <span>回上一頁</span>
+        <span
+          className="
+            flex
+            h-7
+            w-7
+            items-center
+            justify-center
+            rounded-full
+            bg-[#fff1bd]
+            text-base
+            transition
+            duration-200
+            group-hover:-translate-x-0.5
+          "
+        >
+          ←
+        </span>
+
+        <span>
+          回上一頁
+        </span>
       </button>
 
-      {/* 桌機版 */}
+      {/* ======================================
+          桌機版
+      ====================================== */}
+
       <div className="hidden md:block">
-        <DesktopGameAnalysis data={data} />
+        <DesktopGameAnalysis
+          data={data}
+        />
       </div>
 
-      {/* 手機版 */}
+      {/* ======================================
+          手機版
+      ====================================== */}
+
       <div className="block md:hidden">
-        <MobileGameAnalysis data={data} />
+        <MobileGameAnalysis
+          data={data}
+        />
       </div>
     </>
   );

@@ -4,8 +4,8 @@ import { createAdminClient } from "../../lib/supabase/admin";
 
 import {
   getPredictionHistoryStats,
-  isValidPrediction,
-} from "../../lib/prediction/historyStats";
+  isValidMlbPrediction,
+} from "@/lib/prediction/historyStats";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,22 @@ type PredictionHistory = {
   updated_at: string;
   away_score: number | null;
   home_score: number | null;
+};
+
+type MlbMatchDateRow = {
+  game_pk: string | number;
+  match_date: string | null;
+};
+
+type FootballScheduleDateRow = {
+  id: string | number;
+  commence_time: string | null;
+};
+
+type FootballMatchHistoryRow = {
+  match_date: string | null;
+  home_team: string | null;
+  away_team: string | null;
 };
 
 function getResultInfo(result: string) {
@@ -134,6 +150,63 @@ function getYesterdayKey() {
   );
 }
 
+function getHistoryMatchDate(
+  item: PredictionHistory,
+  mlbDateMap: Map<string, string>,
+  footballDateMap: Map<string, string>,
+  footballHistoryDateMap: Map<string, string>,
+) {
+  const sport =
+    String(
+      item.sport ?? "",
+    )
+      .trim()
+      .toUpperCase();
+
+  const gamePk =
+    String(
+      item.game_pk,
+    );
+
+  if (
+    sport === "MLB"
+  ) {
+    return (
+      mlbDateMap.get(
+        gamePk,
+      ) ??
+      item.created_at
+    );
+  }
+
+  if (
+    sport === "FOOTBALL"
+  ) {
+    const matchupKey =
+      `${String(
+        item.home_team ?? "",
+      )
+        .trim()
+        .toLowerCase()}|||${String(
+        item.away_team ?? "",
+      )
+        .trim()
+        .toLowerCase()}`;
+
+    return (
+      footballDateMap.get(
+        gamePk,
+      ) ??
+      footballHistoryDateMap.get(
+        matchupKey,
+      ) ??
+      item.created_at
+    );
+  }
+
+  return item.created_at;
+}
+
 export default async function HistoryPage() {
   const supabase =
     createAdminClient();
@@ -190,7 +263,7 @@ export default async function HistoryPage() {
   histories.filter(
     (item) => {
       if (
-        !isValidPrediction(
+        !isValidMlbPrediction(
           item,
         )
       ) {
@@ -221,6 +294,249 @@ export default async function HistoryPage() {
       );
     },
   );
+  /*
+   * ==========================================
+   * 真正賽事日期
+   * ==========================================
+   */
+
+  const mlbGamePks =
+    Array.from(
+      new Set(
+        validHistories
+          .filter(
+            (item) =>
+              String(
+                item.sport ?? "",
+              )
+                .trim()
+                .toUpperCase() ===
+              "MLB",
+          )
+          .map(
+            (item) =>
+              String(
+                item.game_pk,
+              ),
+          ),
+      ),
+    );
+
+  const footballGamePks =
+    Array.from(
+      new Set(
+        validHistories
+          .filter(
+            (item) =>
+              String(
+                item.sport ?? "",
+              )
+                .trim()
+                .toUpperCase() ===
+              "FOOTBALL",
+          )
+          .map(
+            (item) =>
+              String(
+                item.game_pk,
+              ),
+          ),
+      ),
+    );
+
+  const [
+    mlbDateResult,
+    footballDateResult,
+    footballHistoryResult,
+  ] =
+    await Promise.all([
+      mlbGamePks.length > 0
+        ? supabase
+            .from(
+              "mlb_match_history",
+            )
+            .select(
+              "game_pk, match_date",
+            )
+            .in(
+              "game_pk",
+              mlbGamePks,
+            )
+        : Promise.resolve({
+            data: [],
+            error: null,
+          }),
+
+      footballGamePks.length > 0
+        ? supabase
+            .from(
+              "football_schedule",
+            )
+            .select(
+              "id, commence_time",
+            )
+            .in(
+              "id",
+              footballGamePks,
+            )
+        : Promise.resolve({
+            data: [],
+            error: null,
+          }),
+
+      supabase
+        .from(
+          "football_match_history",
+        )
+        .select(
+          "match_date, home_team, away_team",
+        )
+        .order(
+          "match_date",
+          {
+            ascending: false,
+          },
+        )
+        .limit(
+          500,
+        ),
+    ]);
+
+  if (
+    mlbDateResult.error
+  ) {
+    console.error(
+      "讀取 MLB 真正比賽日期失敗：",
+      mlbDateResult.error,
+    );
+  }
+
+  if (
+    footballDateResult.error
+  ) {
+    console.error(
+      "讀取足球真正比賽日期失敗：",
+      footballDateResult.error,
+    );
+  }
+
+  if (
+    footballHistoryResult.error
+  ) {
+    console.error(
+      "讀取 football_match_history 比賽日期失敗：",
+      footballHistoryResult.error,
+    );
+  }
+
+  const mlbDateMap =
+    new Map<
+      string,
+      string
+    >();
+
+  for (
+    const row
+    of (
+      mlbDateResult.data ??
+      []
+    ) as MlbMatchDateRow[]
+  ) {
+    if (
+      row.game_pk !==
+        null &&
+      row.game_pk !==
+        undefined &&
+      row.match_date
+    ) {
+      mlbDateMap.set(
+        String(
+          row.game_pk,
+        ),
+        String(
+          row.match_date,
+        ),
+      );
+    }
+  }
+
+  const footballDateMap =
+    new Map<
+      string,
+      string
+    >();
+
+  for (
+    const row
+    of (
+      footballDateResult.data ??
+      []
+    ) as FootballScheduleDateRow[]
+  ) {
+    if (
+      row.id !==
+        null &&
+      row.id !==
+        undefined &&
+      row.commence_time
+    ) {
+      footballDateMap.set(
+        String(
+          row.id,
+        ),
+        String(
+          row.commence_time,
+        ),
+      );
+    }
+  }
+
+  const footballHistoryDateMap =
+    new Map<
+      string,
+      string
+    >();
+
+  for (
+    const row
+    of (
+      footballHistoryResult.data ??
+      []
+    ) as FootballMatchHistoryRow[]
+  ) {
+    if (
+      !row.match_date ||
+      !row.home_team ||
+      !row.away_team
+    ) {
+      continue;
+    }
+
+    const matchupKey =
+      `${String(
+        row.home_team,
+      )
+        .trim()
+        .toLowerCase()}|||${String(
+        row.away_team,
+      )
+        .trim()
+        .toLowerCase()}`;
+
+    if (
+      !footballHistoryDateMap.has(
+        matchupKey,
+      )
+    ) {
+      footballHistoryDateMap.set(
+        matchupKey,
+        String(
+          row.match_date,
+        ),
+      );
+    }
+  }
+
   const stats =
     getPredictionHistoryStats(
       histories,
@@ -281,7 +597,12 @@ export default async function HistoryPage() {
       (item) =>
         getTaiwanDateKey(
           new Date(
-            item.created_at,
+            getHistoryMatchDate(
+              item,
+              mlbDateMap,
+              footballDateMap,
+              footballHistoryDateMap,
+            ),
           ),
         ) ===
         yesterdayKey,
@@ -293,7 +614,12 @@ export default async function HistoryPage() {
         const key =
           getTaiwanDateKey(
             new Date(
-              item.created_at,
+              getHistoryMatchDate(
+  item,
+  mlbDateMap,
+  footballDateMap,
+  footballHistoryDateMap,
+),
             ),
           );
 
@@ -671,7 +997,7 @@ function HistoryCard({
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4">
 
           <p className="text-xs text-zinc-500">
-            紀錄時間：
+            預測建立：
             {formatDate(
               history.created_at,
             )}

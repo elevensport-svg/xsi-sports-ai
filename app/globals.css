@@ -1,26 +1,728 @@
 @import "tailwindcss";
 
+/* ==========================================
+   XSI SPORTS AI
+   Cute Sports Lab Design System
+========================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* 基礎 */
+  --background: #fffaf3;
+  --foreground: #3f3a36;
+
+  /* 品牌色 */
+  --xsi-yellow: #ffc94a;
+  --xsi-yellow-light: #fff1b8;
+  --xsi-orange: #ff9f43;
+
+  /* 輔助色 */
+  --xsi-blue: #8ed8ff;
+  --xsi-blue-light: #e8f7ff;
+
+  --xsi-green: #91dfbd;
+  --xsi-green-light: #e9fff5;
+
+  --xsi-pink: #ffb8ce;
+  --xsi-pink-light: #fff0f5;
+
+  --xsi-purple: #c9b8ff;
+  --xsi-purple-light: #f3efff;
+
+  /* 卡片 */
+  --card: #ffffff;
+  --card-border: #eee5da;
+
+  /* 文字 */
+  --text-main: #3f3a36;
+  --text-secondary: #81776f;
+  --text-muted: #aaa19a;
+
+  /* 深色 AI 區塊 */
+  --ai-dark: #292724;
+  --ai-dark-card: #35322f;
+
+  /* 陰影 */
+  --shadow-soft:
+    0 8px 24px rgba(95, 75, 55, 0.08);
+
+  --shadow-card:
+    0 6px 18px rgba(95, 75, 55, 0.07);
+
+  --shadow-hover:
+    0 12px 28px rgba(95, 75, 55, 0.13);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --font-sans:
+    var(--font-geist-sans);
+
+  --font-mono:
+    var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ==========================================
+   Reset
+========================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
+  margin: 0;
+
+  background:
+    radial-gradient(
+      circle at 10% 10%,
+      rgba(255, 201, 74, 0.10),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 90% 20%,
+      rgba(142, 216, 255, 0.10),
+      transparent 25%
+    ),
+    #fffaf3;
+
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  min-height: 100vh;
+}
+
+/* ==========================================
+   Selection
+========================================== */
+
+::selection {
+  background: var(--xsi-yellow-light);
+  color: var(--text-main);
+}
+
+/* ==========================================
+   Scrollbar
+========================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ded5cb;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cfc4b8;
+}
+
+/* ==========================================
+   XSI Page
+========================================== */
+
+.xsi-page {
+  min-height: 100vh;
+
+  background:
+    linear-gradient(
+      180deg,
+      #fffaf3 0%,
+      #fffdf9 100%
+    );
+
+  color: var(--text-main);
+}
+
+/* ==========================================
+   Cute Card
+========================================== */
+
+.xsi-card {
+  background: rgba(
+    255,
+    255,
+    255,
+    0.94
+  );
+
+  border:
+    1px solid
+    var(--card-border);
+
+  border-radius: 24px;
+
+  box-shadow:
+    var(--shadow-card);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.xsi-card:hover {
+  transform:
+    translateY(-2px);
+
+  box-shadow:
+    var(--shadow-hover);
+
+  border-color:
+    #e6d9ca;
+}
+
+/* ==========================================
+   Small Card
+========================================== */
+
+.xsi-mini-card {
+  background: #ffffff;
+
+  border:
+    1px solid
+    var(--card-border);
+
+  border-radius: 20px;
+
+  padding: 18px;
+
+  box-shadow:
+    var(--shadow-card);
+}
+
+/* ==========================================
+   AI Dark Card
+========================================== */
+
+.xsi-ai-card {
+  background:
+    linear-gradient(
+      145deg,
+      #302e2b,
+      #242321
+    );
+
+  color: #ffffff;
+
+  border:
+    1px solid
+    rgba(
+      255,
+      255,
+      255,
+      0.08
+    );
+
+  border-radius: 24px;
+
+  box-shadow:
+    0 12px 30px
+    rgba(
+      35,
+      30,
+      25,
+      0.15
+    );
+}
+
+/* ==========================================
+   Buttons
+========================================== */
+
+.xsi-button {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  gap: 8px;
+
+  border: none;
+
+  border-radius:
+    999px;
+
+  padding:
+    11px 20px;
+
+  font-weight:
+    800;
+
+  cursor:
+    pointer;
+
+  background:
+    linear-gradient(
+      135deg,
+      #ffd76a,
+      #ffc247
+    );
+
+  color:
+    #493b23;
+
+  box-shadow:
+    0 6px 14px
+    rgba(
+      255,
+      183,
+      55,
+      0.22
+    );
+
+  transition:
+    all 0.2s ease;
+}
+
+.xsi-button:hover {
+  transform:
+    translateY(-2px)
+    scale(1.02);
+
+  box-shadow:
+    0 9px 20px
+    rgba(
+      255,
+      183,
+      55,
+      0.28
+    );
+}
+
+.xsi-button:active {
+  transform:
+    scale(0.98);
+}
+
+/* ==========================================
+   Secondary Button
+========================================== */
+
+.xsi-button-secondary {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  gap: 8px;
+
+  border:
+    1px solid
+    #d9edf8;
+
+  border-radius:
+    999px;
+
+  padding:
+    10px 18px;
+
+  background:
+    var(--xsi-blue-light);
+
+  color:
+    #39718d;
+
+  font-weight:
+    700;
+
+  cursor:
+    pointer;
+
+  transition:
+    all 0.2s ease;
+}
+
+.xsi-button-secondary:hover {
+  transform:
+    translateY(-2px);
+
+  background:
+    #dff4ff;
+}
+
+/* ==========================================
+   Badges
+========================================== */
+
+.xsi-badge {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  gap:
+    5px;
+
+  padding:
+    6px 11px;
+
+  border-radius:
+    999px;
+
+  font-size:
+    12px;
+
+  font-weight:
+    800;
+}
+
+.xsi-badge-yellow {
+  background:
+    var(--xsi-yellow-light);
+
+  color:
+    #946d12;
+}
+
+.xsi-badge-blue {
+  background:
+    var(--xsi-blue-light);
+
+  color:
+    #39718d;
+}
+
+.xsi-badge-green {
+  background:
+    var(--xsi-green-light);
+
+  color:
+    #33775b;
+}
+
+.xsi-badge-pink {
+  background:
+    var(--xsi-pink-light);
+
+  color:
+    #9a526b;
+}
+
+.xsi-badge-purple {
+  background:
+    var(--xsi-purple-light);
+
+  color:
+    #6755a1;
+}
+
+/* ==========================================
+   Section Title
+========================================== */
+
+.xsi-section-title {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    10px;
+
+  margin-bottom:
+    6px;
+
+  color:
+    var(--text-main);
+
+  font-size:
+    24px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    -0.5px;
+}
+
+.xsi-section-description {
+  color:
+    var(--text-secondary);
+
+  font-size:
+    14px;
+
+  line-height:
+    1.7;
+}
+
+/* ==========================================
+   Cute Icon Bubble
+========================================== */
+
+.xsi-icon {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  width:
+    42px;
+
+  height:
+    42px;
+
+  border-radius:
+    15px;
+
+  background:
+    var(--xsi-yellow-light);
+
+  font-size:
+    21px;
+
+  box-shadow:
+    0 5px 12px
+    rgba(
+      100,
+      80,
+      50,
+      0.08
+    );
+}
+
+/* ==========================================
+   Stat Card
+========================================== */
+
+.xsi-stat {
+  position:
+    relative;
+
+  overflow:
+    hidden;
+
+  background:
+    #ffffff;
+
+  border:
+    1px solid
+    var(--card-border);
+
+  border-radius:
+    22px;
+
+  padding:
+    20px;
+
+  box-shadow:
+    var(--shadow-card);
+}
+
+.xsi-stat::after {
+  content:
+    "";
+
+  position:
+    absolute;
+
+  width:
+    70px;
+
+  height:
+    70px;
+
+  right:
+    -20px;
+
+  bottom:
+    -25px;
+
+  border-radius:
+    999px;
+
+  background:
+    rgba(
+      255,
+      201,
+      74,
+      0.12
+    );
+}
+
+.xsi-stat-value {
+  position:
+    relative;
+
+  z-index:
+    1;
+
+  font-size:
+    30px;
+
+  font-weight:
+    900;
+
+  color:
+    var(--text-main);
+}
+
+.xsi-stat-label {
+  position:
+    relative;
+
+  z-index:
+    1;
+
+  margin-top:
+    4px;
+
+  color:
+    var(--text-secondary);
+
+  font-size:
+    13px;
+
+  font-weight:
+    700;
+}
+
+/* ==========================================
+   Cute Input
+========================================== */
+
+.xsi-input {
+  width:
+    100%;
+
+  padding:
+    12px 15px;
+
+  background:
+    #ffffff;
+
+  border:
+    1px solid
+    var(--card-border);
+
+  border-radius:
+    16px;
+
+  color:
+    var(--text-main);
+
+  outline:
+    none;
+
+  transition:
+    all 0.2s ease;
+}
+
+.xsi-input:focus {
+  border-color:
+    var(--xsi-yellow);
+
+  box-shadow:
+    0 0 0 4px
+    rgba(
+      255,
+      201,
+      74,
+      0.15
+    );
+}
+
+/* ==========================================
+   Progress Bar
+========================================== */
+
+.xsi-progress {
+  width:
+    100%;
+
+  height:
+    9px;
+
+  overflow:
+    hidden;
+
+  border-radius:
+    999px;
+
+  background:
+    #f1ebe4;
+}
+
+.xsi-progress-bar {
+  height:
+    100%;
+
+  border-radius:
+    999px;
+
+  background:
+    linear-gradient(
+      90deg,
+      #ffc94a,
+      #ff9f43
+    );
+}
+
+/* ==========================================
+   Mobile
+========================================== */
+
+@media (
+  max-width: 768px
+) {
+  .xsi-card {
+    border-radius:
+      20px;
+  }
+
+  .xsi-mini-card {
+    border-radius:
+      18px;
+
+    padding:
+      15px;
+  }
+
+  .xsi-section-title {
+    font-size:
+      21px;
+  }
+
+  .xsi-stat {
+    border-radius:
+      18px;
+
+    padding:
+      16px;
+  }
+
+  .xsi-stat-value {
+    font-size:
+      26px;
+  }
 }

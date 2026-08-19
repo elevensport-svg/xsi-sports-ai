@@ -343,8 +343,8 @@ function OddsValue({
     <span
       className={
         isBest
-          ? "inline-flex rounded-md bg-yellow-400 px-2 py-1 font-black text-black"
-          : "font-bold text-white"
+          ? "inline-flex rounded-full bg-[#ffe694] px-2.5 py-1 font-black text-[#8f6212] shadow-sm"
+          : "font-black text-[#4a4038]"
       }
     >
       {formatOdds(
@@ -366,7 +366,7 @@ function SpreadValue({
 }) {
   if (!outcome) {
     return (
-      <span className="text-zinc-600">
+      <span className="text-[#b0a59b]">
         --
       </span>
     );
@@ -374,13 +374,13 @@ function SpreadValue({
 
   return (
     <div>
-      <p className="font-bold text-white">
+      <p className="font-black text-[#4a4038]">
         {formatPoint(
           outcome.point,
         )}
       </p>
 
-      <p className="mt-1 text-xs text-zinc-500">
+      <p className="mt-1 text-xs text-[#9f9388]">
         {formatOdds(
           outcome.price,
           format,
@@ -403,7 +403,7 @@ function TotalValue({
 }) {
   if (!outcome) {
     return (
-      <span className="text-zinc-600">
+      <span className="text-[#b0a59b]">
         --
       </span>
     );
@@ -411,13 +411,13 @@ function TotalValue({
 
   return (
     <div>
-      <p className="font-bold text-white">
+      <p className="font-black text-[#4a4038]">
         {label}{" "}
         {outcome.point ??
           "--"}
       </p>
 
-      <p className="mt-1 text-xs text-zinc-500">
+      <p className="mt-1 text-xs text-[#9f9388]">
         {formatOdds(
           outcome.price,
           format,
@@ -439,18 +439,18 @@ function ScoreBox({
   score: MarketSideScore;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-      <p className="text-sm text-zinc-500">
+    <div className="rounded-[24px] border border-[#eee3d6] bg-white p-5 shadow-sm">
+      <p className="text-sm text-[#9f9388]">
         {label}
       </p>
 
       <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-4xl font-black text-yellow-400">
+          <p className="text-4xl font-black text-[#c98213]">
             {score.score}
           </p>
 
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-[#8f8378]">
             {score.grade}
           </p>
         </div>
@@ -462,7 +462,7 @@ function ScoreBox({
                 key={
                   reason
                 }
-                className="mt-1 text-xs text-zinc-500"
+                className="mt-1 text-xs text-[#9f9388]"
               >
                 • {reason}
               </p>
@@ -473,7 +473,7 @@ function ScoreBox({
 
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-zinc-800">
         <div
-          className="h-full rounded-full bg-yellow-400"
+          className="h-full rounded-full bg-[#ffc94a]"
           style={{
             width: `${Math.min(
               100,
@@ -517,19 +517,19 @@ function ConsensusCard({
   ) => string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-      <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+    <div className="rounded-[24px] border border-[#eee3d6] bg-white p-5 shadow-sm">
+      <p className="text-xs font-bold uppercase tracking-widest text-[#9f9388]">
         {label}
       </p>
 
       <div className="mt-4 space-y-4">
 
         <div className="flex items-center justify-between gap-4">
-          <span className="text-sm text-zinc-400">
+          <span className="text-sm text-[#8f8378]">
             {awayTeam}
           </span>
 
-          <span className="text-xl font-black text-white">
+          <span className="text-xl font-black text-[#4a4038]">
             {formatValue(
               awayValue,
             )}
@@ -537,11 +537,11 @@ function ConsensusCard({
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <span className="text-sm text-zinc-400">
+          <span className="text-sm text-[#8f8378]">
             {homeTeam}
           </span>
 
-          <span className="text-xl font-black text-white">
+          <span className="text-xl font-black text-[#4a4038]">
             {formatValue(
               homeValue,
             )}
@@ -612,18 +612,18 @@ export default function MarketCard({
 
   if (!market) {
     return (
-      <section className="mt-10 rounded-3xl border border-yellow-500/20 bg-zinc-950 p-6 md:p-8">
+      <section className="mt-10 rounded-[32px] border border-[#eee0cd] bg-white p-6 shadow-[0_14px_38px_rgba(95,75,55,0.08)] md:p-8">
 
-        <p className="text-sm font-black text-yellow-400">
-          XSI 市場分析
-        </p>
+        <div className="flex items-start gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-[#fff0bd] text-2xl shadow-sm">💰</div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c98213]">XSI MARKET ANALYSIS</p>
+            <h2 className="mt-2 text-3xl font-black text-[#4a4038]">市場盤口分析</h2>
+          </div>
+        </div>
 
-        <h2 className="mt-2 text-3xl font-black">
-          市場盤口分析
-        </h2>
-
-        <div className="mt-6 rounded-2xl bg-zinc-900 p-6">
-          <p className="text-zinc-400">
+        <div className="mt-6 rounded-[24px] bg-white p-6">
+          <p className="text-[#8f8378]">
             目前找不到這場比賽的盤口資料。
           </p>
         </div>
@@ -659,34 +659,29 @@ export default function MarketCard({
       : "decimal";
 
   return (
-    <section className="mt-10 rounded-3xl border border-yellow-500/20 bg-zinc-950 p-6 md:p-8">
+    <section className="mt-10 rounded-[32px] border border-[#eee0cd] bg-white p-6 shadow-[0_14px_38px_rgba(95,75,55,0.08)] md:p-8">
 
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
 
-        <div>
-          <p className="text-sm font-black text-yellow-400">
-            XSI 市場分析
-          </p>
-
-          <h2 className="mt-2 text-3xl font-black">
-            市場盤口分析
-          </h2>
-
-          <p className="mt-2 text-sm text-zinc-500">
-            Moneyline、讓分與大小分莊家比較
-          </p>
+        <div className="flex items-start gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] bg-[#fff0bd] text-2xl shadow-sm">💰</div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c98213]">XSI MARKET ANALYSIS</p>
+            <h2 className="mt-2 text-3xl font-black text-[#4a4038]">市場盤口分析</h2>
+            <p className="mt-2 text-sm text-[#978a7f]">Moneyline、讓分與大小分莊家比較</p>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
 
-          <div className="rounded-xl border border-yellow-500/20 bg-yellow-400/5 px-4 py-3">
+          <div className="rounded-[18px] border border-[#efdca8] bg-[#ffc94a]/5 px-4 py-3">
 
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-[#9f9388]">
               賠率格式
             </p>
 
-            <p className="mt-1 text-sm font-black text-yellow-400">
+            <p className="mt-1 text-sm font-black text-[#c98213]">
               {getOddsFormatLabel(
                 currentFormat,
               )}
@@ -694,13 +689,13 @@ export default function MarketCard({
 
           </div>
 
-          <div className="rounded-xl bg-zinc-900 px-4 py-3 md:text-right">
+          <div className="rounded-[18px] border border-[#dcecf4] bg-[#f1faff] px-4 py-3 md:text-right">
 
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-[#9f9388]">
               比賽時間
             </p>
 
-            <p className="mt-1 text-sm font-bold text-zinc-300">
+            <p className="mt-1 text-sm font-bold text-[#6f7f87]">
               {formatTaiwanTime(
                 market.commenceTime,
               )}
@@ -762,19 +757,19 @@ export default function MarketCard({
           }
         />
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="rounded-[24px] border border-[#eee3d6] bg-white p-5 shadow-sm">
 
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#9f9388]">
             平均 Total
           </p>
 
-          <p className="mt-4 text-4xl font-black text-yellow-400">
+          <p className="mt-4 text-4xl font-black text-[#c98213]">
             {market.consensus
               .total ??
               "--"}
           </p>
 
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-[#9f9388]">
             大小分市場平均值
           </p>
 
@@ -802,29 +797,29 @@ export default function MarketCard({
       </div>
 
       {/* Bookmakers */}
-      <div className="mt-8 overflow-hidden rounded-2xl border border-zinc-800">
+      <div className="mt-8 overflow-hidden rounded-[24px] border border-[#eee3d6]">
 
-        <div className="flex flex-col gap-2 border-b border-zinc-800 bg-zinc-900 px-5 py-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-2 border-b border-[#eee3d6] bg-white px-5 py-4 md:flex-row md:items-center md:justify-between">
 
           <div>
-            <p className="font-black text-white">
+            <p className="font-black text-[#4a4038]">
               多家莊家盤口
             </p>
 
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-[#9f9388]">
               黃色標記代表目前較佳 Moneyline
             </p>
           </div>
 
           <div className="flex items-center gap-2">
 
-            <span className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs font-bold text-zinc-400">
+            <span className="rounded-full border border-[#e7dccf] bg-[#fffdf9] px-3 py-1 text-xs font-bold text-[#8f8378]">
               {getOddsFormatLabel(
                 currentFormat,
               )}
             </span>
 
-            <p className="text-sm font-bold text-yellow-400">
+            <p className="text-sm font-bold text-[#c98213]">
               共 {rows.length} 家
             </p>
 
@@ -836,7 +831,7 @@ export default function MarketCard({
 
           <table className="w-full min-w-[1050px] text-left">
 
-            <thead className="bg-black/40 text-xs uppercase tracking-wider text-zinc-500">
+            <thead className="bg-[#fff8ef] text-xs uppercase tracking-wider text-[#9f9388]">
 
               <tr>
                 <th className="px-5 py-4">
@@ -874,7 +869,7 @@ export default function MarketCard({
 
             </thead>
 
-            <tbody className="divide-y divide-zinc-800">
+            <tbody className="divide-y divide-[#eee8e0]">
 
               {rows.map(
                 (row) => {
@@ -897,12 +892,12 @@ export default function MarketCard({
                           .bookmaker
                           .key
                       }
-                      className="bg-zinc-950 transition hover:bg-zinc-900"
+                      className="bg-white transition hover:bg-[#fffaf0]"
                     >
 
                       <td className="px-5 py-4">
 
-                        <p className="font-black text-white">
+                        <p className="font-black text-[#4a4038]">
                           {
                             row
                               .bookmaker
@@ -910,7 +905,7 @@ export default function MarketCard({
                           }
                         </p>
 
-                        <p className="mt-1 text-xs text-zinc-600">
+                        <p className="mt-1 text-xs text-[#b0a59b]">
                           {
                             row
                               .bookmaker
@@ -1010,7 +1005,7 @@ export default function MarketCard({
 
                       </td>
 
-                      <td className="px-5 py-4 text-right text-xs text-zinc-500">
+                      <td className="px-5 py-4 text-right text-xs text-[#9f9388]">
 
                         {formatTaiwanTime(
                           row
@@ -1033,7 +1028,7 @@ export default function MarketCard({
 
         {rows.length ===
           0 && (
-          <div className="bg-zinc-950 p-8 text-center text-zinc-500">
+          <div className="bg-[#fffdf9] p-8 text-center text-[#9f9388]">
             目前沒有莊家盤口資料。
           </div>
         )}
