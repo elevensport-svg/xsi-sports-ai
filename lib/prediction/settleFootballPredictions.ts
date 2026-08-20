@@ -2,122 +2,203 @@ import {
   createAdminClient,
 } from "../supabase/admin";
 
-import {
-  getFootballHistoryTeamName,
-} from "../football/team-aliases";
-
-type PendingFootballPrediction = {
+type PendingPrediction = {
   id: string;
   game_pk: string;
+  sport: string;
   home_team: string;
   away_team: string;
   prediction: string;
-  result:
-    string | null;
-  created_at: string;
-
-  commence_time?:
-    string | null;
+  result: string | null;
 };
 
-type FinishedFootballMatch = {
-  id:
-    string | number;
+type MlbLiveFeed = {
+  gameData?: {
+    status?: {
+      abstractGameState?: string;
+      detailedState?: string;
+    };
+  };
 
-  league:
-    string;
+  liveData?: {
+    linescore?: {
+      teams?: {
+        home?: {
+          runs?: number;
+        };
 
-  match_date:
-    string;
-
-  home_team:
-    string;
-
-  away_team:
-    string;
-
-  home_score:
-    number;
-
-  away_score:
-    number;
-
-  status:
-    string;
+        away?: {
+          runs?: number;
+        };
+      };
+    };
+  };
 };
 
-export type FootballSettlementResult = {
+export type SettleMlbPredictionsResult = {
   pending: number;
-  matched: number;
+  finished: number;
   settled: number;
   wins: number;
   losses: number;
-  pushes: number;
-  notFound: number;
-  unsupported: number;
-  futureGames: number;
-  missingSchedule: number;
+  skipped: number;
+  failed: number;
 
-  details: Array<{
-    id: string;
+  errors: Array<{
     gamePk: string;
-    homeTeam: string;
-    awayTeam: string;
-    prediction: string;
-    score?: string;
-    result?:
-      | "win"
-      | "loss"
-      | "push";
     message: string;
   }>;
 };
 
 function normalize(
-  value:
-    string,
+  value: unknown,
 ) {
-  return value
-    .normalize(
-      "NFD",
-    )
-    .replace(
-      /[\u0300-\u036f]/g,
-      "",
-    )
-    .toLowerCase()
+  return String(
+    value ?? "",
+  )
     .trim()
-    .replace(
-      /[^a-z0-9]/g,
-      "",
-    );
+    .toLowerCase();
 }
 
-function isSameTeam(
-  predictionName:
-    string,
-  historyName:
-    string,
+function getErrorMessage(
+  error: unknown,
 ) {
+  if (
+    error instanceof Error
+  ) {
+    return error.message;
+  }
+
+  try {
+    return JSON.stringify(
+      error,
+    );
+  } catch {
+    return String(
+      error,
+    );
+  }
+}
+
+function isFinishedGame(
+  feed: MlbLiveFeed,
+) {
+  const abstractState =
+    normalize(
+      feed.gameData
+        ?.status
+        ?.abstractGameState,
+    );
+
+  const detailedState =
+    normalize(
+      feed.gameData
+        ?.status
+        ?.detailedState,
+    );
+
   return (
-    normalize(
-      getFootballHistoryTeamName(
-        predictionName,
-      ),
-    ) ===
-    normalize(
-      historyName,
-    )
+    abstractState ===
+      "final" ||
+    detailedState ===
+      "final" ||
+    detailedState ===
+      "game over" ||
+    detailedState ===
+      "completed early"
   );
 }
 
-function parseSpread(
-  prediction:
-    string,
+function getFinalScore(
+  feed: MlbLiveFeed,
 ) {
+  const homeRuns =
+    Number(
+      feed.liveData
+        ?.linescore
+        ?.teams
+        ?.home
+        ?.runs,
+    );
+
+  const awayRuns =
+    Number(
+      feed.liveData
+        ?.linescore
+        ?.teams
+        ?.away
+        ?.runs,
+    );
+
+  if (
+    !Number.isFinite(
+      homeRuns,
+    ) ||
+    !Number.isFinite(
+      awayRuns,
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    homeRuns,
+    awayRuns,
+  };
+}
+
+function getRecommendedTeam(
+  prediction: PendingPrediction,
+) {
+  const recommendation =
+    normalize(
+      prediction.prediction,
+    );
+
+  const homeTeam =
+    normalize(
+      prediction.home_team,
+    );
+
+  const awayTeam =
+    normalize(
+      prediction.away_team,
+    );
+
+  if (
+    homeTeam &&
+    recommendation.includes(
+      homeTeam,
+    )
+  ) {
+    return "home";
+  }
+
+  if (
+    awayTeam &&
+    recommendation.includes(
+      awayTeam,
+    )
+  ) {
+    return "away";
+  }
+
+  return null;
+}
+
+function getSpread(
+  predictionText: string,
+) {
+  /*
+   * 支援：
+   *
+   * Dodgers 讓分 -1.5
+   * Dodgers -1.5
+   * Yankees 受讓 +1.5
+   */
   const match =
-    prediction.match(
-      /(讓球|受讓)\s*([+-]?\d+(?:\.\d+)?)/,
+    predictionText.match(
+      /([+-]\s*\d+(?:\.\d+)?)/,
     );
 
   if (
@@ -126,1101 +207,456 @@ function parseSpread(
     return null;
   }
 
-  const spread =
+  const value =
     Number(
-      match[2],
+      match[1].replace(
+        /\s+/g,
+        "",
+      ),
     );
 
-  if (
-    !Number.isFinite(
-      spread,
-    )
-  ) {
-    return null;
-  }
-
-  return {
-    kind:
-      match[1] as
-        | "讓球"
-        | "受讓",
-
-    spread,
-  };
+  return Number.isFinite(
+    value,
+  )
+    ? value
+    : null;
 }
 
-function settlePrediction({
+function calculateResult({
   prediction,
-  homeTeam,
-  awayTeam,
-  homeScore,
-  awayScore,
+  homeRuns,
+  awayRuns,
 }: {
-  prediction:
-    string;
-
-  homeTeam:
-    string;
-
-  awayTeam:
-    string;
-
-  homeScore:
-    number;
-
-  awayScore:
-    number;
+  prediction: PendingPrediction;
+  homeRuns: number;
+  awayRuns: number;
 }):
   | "win"
   | "loss"
-  | "push"
   | null {
   const text =
-    prediction.trim();
+    normalize(
+      prediction.prediction,
+    );
 
-  /*
-   * 1X2
-   */
-  if (
-    text.includes(
-      "和局",
-    )
-  ) {
-    return homeScore ===
-      awayScore
-      ? "win"
-      : "loss";
-  }
-
-  if (
-    text.includes(
-      "主勝",
-    )
-  ) {
-    return homeScore >
-      awayScore
-      ? "win"
-      : "loss";
-  }
-
-  if (
-    text.includes(
-      "客勝",
-    )
-  ) {
-    return awayScore >
-      homeScore
-      ? "win"
-      : "loss";
-  }
-
-  /*
-   * Spread
-   *
-   * 推薦文字格式目前為：
-   * Team 受讓 +0.5
-   * Team 讓球 -0.5
-   */
-  const parsedSpread =
-    parseSpread(
-      text,
+  const recommendedTeam =
+    getRecommendedTeam(
+      prediction,
     );
 
   if (
-    !parsedSpread
+    !recommendedTeam
   ) {
     return null;
   }
 
-  const homeKey =
-    normalize(
-      homeTeam,
+  /*
+   * ==========================================
+   * 獨贏 / Moneyline
+   * ==========================================
+   */
+  const isMoneyline =
+    text.includes(
+      "獨贏",
+    ) ||
+    text.includes(
+      "moneyline",
+    ) ||
+    text.includes(
+      "money line",
     );
-
-  const awayKey =
-    normalize(
-      awayTeam,
-    );
-
-  const predictionKey =
-    normalize(
-      text,
-    );
-
-  let selectedScore:
-    number;
-
-  let opponentScore:
-    number;
 
   if (
-    predictionKey.includes(
-      homeKey,
-    )
+    isMoneyline
   ) {
-    selectedScore =
-      homeScore;
+    if (
+      recommendedTeam ===
+      "home"
+    ) {
+      return homeRuns >
+        awayRuns
+        ? "win"
+        : "loss";
+    }
 
-    opponentScore =
-      awayScore;
-  } else if (
-    predictionKey.includes(
-      awayKey,
-    )
+    return awayRuns >
+      homeRuns
+      ? "win"
+      : "loss";
+  }
+
+  /*
+   * ==========================================
+   * 讓分 / 受讓
+   * ==========================================
+   */
+  const isSpread =
+    text.includes(
+      "讓分",
+    ) ||
+    text.includes(
+      "受讓",
+    ) ||
+    text.includes(
+      "+1.5",
+    ) ||
+    text.includes(
+      "-1.5",
+    );
+
+  if (
+    isSpread
   ) {
-    selectedScore =
-      awayScore;
-
-    opponentScore =
-      homeScore;
-  } else {
-    /*
-     * 如果 API 名稱跟歷史名稱不同，
-     * 再用 Alias 後名稱判斷。
-     */
-    const aliasedHomeKey =
-      normalize(
-        getFootballHistoryTeamName(
-          homeTeam,
-        ),
-      );
-
-    const aliasedAwayKey =
-      normalize(
-        getFootballHistoryTeamName(
-          awayTeam,
-        ),
+    const spread =
+      getSpread(
+        prediction.prediction,
       );
 
     if (
-      predictionKey.includes(
-        aliasedHomeKey,
-      )
+      spread === null
     ) {
-      selectedScore =
-        homeScore;
-
-      opponentScore =
-        awayScore;
-    } else if (
-      predictionKey.includes(
-        aliasedAwayKey,
-      )
-    ) {
-      selectedScore =
-        awayScore;
-
-      opponentScore =
-        homeScore;
-    } else {
       return null;
     }
-  }
-
-  const adjusted =
-    selectedScore +
-    parsedSpread.spread;
-
-  if (
-    adjusted >
-    opponentScore
-  ) {
-    return "win";
-  }
-
-  if (
-    adjusted <
-    opponentScore
-  ) {
-    return "loss";
-  }
-
-  return "push";
-}
-
-
-function getCandidateTeamNames(
-  teamName: string,
-  rows: FinishedFootballMatch[],
-  side:
-    | "home"
-    | "away",
-) {
-  const normalizedRequested =
-    normalize(
-      getFootballHistoryTeamName(
-        teamName,
-      ),
-    );
-
-  const candidates =
-    new Map<
-      string,
-      number
-    >();
-
-  for (
-    const row
-    of rows
-  ) {
-    const value =
-      side ===
-      "home"
-        ? row.home_team
-        : row.away_team;
-
-    const normalizedValue =
-      normalize(
-        value,
-      );
-
-    let score =
-      0;
 
     if (
-      normalizedValue ===
-      normalizedRequested
+      recommendedTeam ===
+      "home"
     ) {
-      score =
-        100;
-    } else if (
-      normalizedValue.includes(
-        normalizedRequested,
-      ) ||
-      normalizedRequested.includes(
-        normalizedValue,
-      )
-    ) {
-      score =
-        80;
-    } else {
-      const requestedTokens =
-        new Set(
-          teamName
-            .toLowerCase()
-            .split(
-              /[^a-z0-9]+/,
-            )
-            .filter(
-              Boolean,
-            ),
-        );
+      const adjustedScore =
+        homeRuns +
+        spread;
 
-      const valueTokens =
-        new Set(
-          value
-            .toLowerCase()
-            .split(
-              /[^a-z0-9]+/,
-            )
-            .filter(
-              Boolean,
-            ),
-        );
-
-      let overlap =
-        0;
-
-      for (
-        const token
-        of requestedTokens
-      ) {
-        if (
-          valueTokens.has(
-            token,
-          )
-        ) {
-          overlap +=
-            1;
-        }
-      }
-
-      score =
-        overlap;
+      return adjustedScore >
+        awayRuns
+        ? "win"
+        : "loss";
     }
 
-    const current =
-      candidates.get(
-        value,
-      ) ??
-      0;
+    const adjustedScore =
+      awayRuns +
+      spread;
 
-    candidates.set(
-      value,
-      Math.max(
-        current,
-        score,
-      ),
-    );
+    return adjustedScore >
+      homeRuns
+      ? "win"
+      : "loss";
   }
 
-  return Array.from(
-    candidates.entries(),
-  )
-    .sort(
-      (
-        a,
-        b,
-      ) =>
-        b[1] -
-        a[1] ||
-        a[0].localeCompare(
-          b[0],
-        ),
-    )
-    .slice(
-      0,
-      5,
-    )
-    .map(
-      (
-        [
-          name,
-          score,
-        ],
-      ) =>
-        `${name} (${score})`,
-    );
-}
-
-async function findFinishedMatch({
-  supabase,
-  prediction,
-}: {
-  supabase:
-    ReturnType<
-      typeof createAdminClient
-    >;
-
-  prediction:
-    PendingFootballPrediction;
-}) {
   /*
-   * 結算必須以真正的比賽開賽時間 commence_time 為準，
-   * 不能使用 prediction.created_at。
+   * ==========================================
+   * 舊資料沒有寫「獨贏」時
+   * 只要 prediction 明確包含球隊名稱，
+   * 預設視為 Moneyline
+   * ==========================================
    */
   if (
-    !prediction.commence_time
+    recommendedTeam ===
+    "home"
   ) {
-    return {
-      matched:
-        null,
-
-      diagnostics: {
-        searchStart:
-          "",
-
-        searchEnd:
-          "",
-
-        finishedRows:
-          0,
-
-        requestedHome:
-          prediction.home_team,
-
-        requestedAway:
-          prediction.away_team,
-
-        normalizedHome:
-          normalize(
-            getFootballHistoryTeamName(
-              prediction.home_team,
-            ),
-          ),
-
-        normalizedAway:
-          normalize(
-            getFootballHistoryTeamName(
-              prediction.away_team,
-            ),
-          ),
-
-        homeCandidates:
-          [],
-
-        awayCandidates:
-          [],
-      },
-    };
+    return homeRuns >
+      awayRuns
+      ? "win"
+      : "loss";
   }
 
-  const kickoff =
-    new Date(
-      prediction.commence_time,
+  return awayRuns >
+    homeRuns
+    ? "win"
+    : "loss";
+}
+
+async function getMlbGameFeed(
+  gamePk: string,
+): Promise<MlbLiveFeed | null> {
+  const url =
+    `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+
+  try {
+    const response =
+      await fetch(
+        url,
+        {
+          cache:
+            "no-store",
+        },
+      );
+
+    if (
+      !response.ok
+    ) {
+      console.error(
+        `MLB 結算 API ${gamePk} 錯誤：`,
+        response.status,
+      );
+
+      return null;
+    }
+
+    return (
+      (await response.json()) as MlbLiveFeed
+    );
+  } catch (error) {
+    console.error(
+      `取得 MLB ${gamePk} 比賽結果失敗：`,
+      error,
     );
 
-  const searchStart =
-    new Date(
-      kickoff.getTime() -
-        12 *
-        60 *
-        60 *
-        1000,
-    );
+    return null;
+  }
+}
 
-  const searchEnd =
-    new Date(
-      kickoff.getTime() +
-        36 *
-        60 *
-        60 *
-        1000,
-    );
+export async function settleFootballPredictions(): Promise<SettleMlbPredictionsResult> {
+  const summary: SettleMlbPredictionsResult = {
+    pending: 0,
+    finished: 0,
+    settled: 0,
+    wins: 0,
+    losses: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+  };
 
+  const supabase =
+    createAdminClient();
+
+  /*
+   * ==========================================
+   * 1. 只抓 MLB pending
+   * ==========================================
+   */
   const {
     data,
     error,
-  } =
-    await supabase
-      .from(
-        "football_match_history",
-      )
-      .select(
-        `
-          id,
-          league,
-          match_date,
-          home_team,
-          away_team,
-          home_score,
-          away_score,
-          status
-        `,
-      )
-      .eq(
-        "status",
-        "finished",
-      )
-      .gte(
-        "match_date",
-        searchStart
-          .toISOString(),
-      )
-      .lte(
-        "match_date",
-        searchEnd
-          .toISOString(),
-      )
-      .order(
-        "match_date",
-        {
-          ascending:
-            true,
-        },
-      );
+  } = await supabase
+    .from(
+      "prediction_history",
+    )
+    .select(
+      `
+        id,
+        game_pk,
+        sport,
+        home_team,
+        away_team,
+        prediction,
+        result
+      `,
+    )
+    .eq(
+      "sport",
+      "MLB",
+    )
+    .eq(
+      "result",
+      "pending",
+    );
 
   if (
     error
   ) {
-    throw new Error(
-      `讀取 football_match_history 失敗：${error.message}`,
+    console.error(
+      "讀取 MLB 待結算預測失敗：",
+      error,
     );
+
+    summary.failed += 1;
+
+    summary.errors.push({
+      gamePk:
+        "DATABASE",
+
+      message:
+        getErrorMessage(
+          error,
+        ),
+    });
+
+    return summary;
   }
 
-  const rows =
-    (
-      data ??
-      []
-    ) as FinishedFootballMatch[];
+  const pendingPredictions =
+    (data ??
+      []) as PendingPrediction[];
 
-  const matched =
-    rows.find(
-      (
-        row,
-      ) =>
-        isSameTeam(
-          prediction.home_team,
-          row.home_team,
-        ) &&
-        isSameTeam(
-          prediction.away_team,
-          row.away_team,
-        ),
-    ) ??
-    null;
-
-  return {
-    matched,
-
-    diagnostics: {
-      searchStart:
-        searchStart.toISOString(),
-
-      searchEnd:
-        searchEnd.toISOString(),
-
-      finishedRows:
-        rows.length,
-
-      requestedHome:
-        prediction.home_team,
-
-      requestedAway:
-        prediction.away_team,
-
-      normalizedHome:
-        normalize(
-          getFootballHistoryTeamName(
-            prediction.home_team,
-          ),
-        ),
-
-      normalizedAway:
-        normalize(
-          getFootballHistoryTeamName(
-            prediction.away_team,
-          ),
-        ),
-
-      homeCandidates:
-        getCandidateTeamNames(
-          prediction.home_team,
-          rows,
-          "home",
-        ),
-
-      awayCandidates:
-        getCandidateTeamNames(
-          prediction.away_team,
-          rows,
-          "away",
-        ),
-    },
-  };
-}
-
-export async function settleFootballPredictions(): Promise<FootballSettlementResult> {
-  const supabase =
-    createAdminClient();
-
-  const {
-    data:
-      pendingData,
-
-    error:
-      pendingError,
-  } =
-    await supabase
-      .from(
-        "prediction_history",
-      )
-      .select(
-        `
-          id,
-          game_pk,
-          home_team,
-          away_team,
-          prediction,
-          result,
-          created_at
-        `,
-      )
-      .eq(
-        "sport",
-        "FOOTBALL",
-      )
-      .or(
-        "result.is.null,result.eq.pending",
-      )
-      .order(
-        "created_at",
-        {
-          ascending:
-            true,
-        },
-      );
+  summary.pending =
+    pendingPredictions.length;
 
   if (
-    pendingError
+    pendingPredictions.length ===
+    0
   ) {
-    throw new Error(
-      `讀取足球 pending 預測失敗：${pendingError.message}`,
-    );
+    return summary;
   }
-
-  const pendingRows =
-    (
-      pendingData ??
-      []
-    ) as PendingFootballPrediction[];
 
   /*
    * ==========================================
-   * 取得真正賽事開賽時間
+   * 2. 逐場確認 MLB 比賽
    * ==========================================
    */
-  const gamePks =
-    Array.from(
-      new Set(
-        pendingRows.map(
-          (item) =>
-            String(
-              item.game_pk,
-            ),
-        ),
-      ),
-    );
-
-  const scheduleMap =
-    new Map<
-      string,
-      string
-    >();
-
-  if (
-    gamePks.length >
-    0
-  ) {
-    const {
-      data:
-        scheduleData,
-
-      error:
-        scheduleError,
-    } =
-      await supabase
-        .from(
-          "football_schedule",
-        )
-        .select(
-          "id, commence_time",
-        )
-        .in(
-          "id",
-          gamePks,
-        );
-
-    if (
-      scheduleError
-    ) {
-      throw new Error(
-        `讀取 football_schedule 失敗：${scheduleError.message}`,
-      );
-    }
-
-    for (
-      const row
-      of scheduleData ??
-      []
-    ) {
-      if (
-        row.id &&
-        row.commence_time
-      ) {
-        scheduleMap.set(
-          String(
-            row.id,
-          ),
-          String(
-            row.commence_time,
-          ),
-        );
-      }
-    }
-  }
-
-  for (
-    const item
-    of pendingRows
-  ) {
-    item.commence_time =
-      scheduleMap.get(
-        String(
-          item.game_pk,
-        ),
-      ) ??
-      null;
-  }
-
-  const summary:
-    FootballSettlementResult = {
-    pending:
-      pendingRows.length,
-
-    matched:
-      0,
-
-    settled:
-      0,
-
-    wins:
-      0,
-
-    losses:
-      0,
-
-    pushes:
-      0,
-
-    notFound:
-      0,
-
-    unsupported:
-      0,
-
-    futureGames:
-      0,
-
-    missingSchedule:
-      0,
-
-    details:
-      [],
-  };
-
   for (
     const prediction
-    of pendingRows
+    of pendingPredictions
   ) {
-    if (
-      !prediction.commence_time
-    ) {
-      summary.missingSchedule +=
-        1;
-
-      summary.details.push({
-        id:
-          prediction.id,
-
-        gamePk:
-          prediction.game_pk,
-
-        homeTeam:
-          prediction.home_team,
-
-        awayTeam:
-          prediction.away_team,
-
-        prediction:
-          prediction.prediction,
-
-        message:
-          "找不到 football_schedule 開賽時間",
-      });
-
-      continue;
-    }
-
-    const kickoff =
-      new Date(
-        prediction.commence_time,
-      );
+    const gamePk =
+      String(
+        prediction.game_pk ??
+          "",
+      ).trim();
 
     /*
-     * 足球比賽通常約 2 小時。
-     * 開賽後 3 小時才進入結算，避免比賽進行中誤判。
+     * 排除假 game_pk
      */
-    const settlementReadyAt =
-      new Date(
-        kickoff.getTime() +
-          3 *
-          60 *
-          60 *
-          1000,
-      );
-
     if (
-      settlementReadyAt.getTime() >
-      Date.now()
+      !/^\d+$/.test(
+        gamePk,
+      )
     ) {
-      summary.futureGames +=
-        1;
-
+      summary.skipped += 1;
       continue;
     }
 
-    const matchResult =
-      await findFinishedMatch({
-        supabase,
-        prediction,
-      });
-
-    const match =
-      matchResult.matched;
-
-    if (
-      !match
-    ) {
-      summary.notFound +=
-        1;
+    try {
+      const feed =
+        await getMlbGameFeed(
+          gamePk,
+        );
 
       if (
-        summary.notFound <=
-        10
+        !feed
       ) {
-        console.log(
-          "======================================",
-        );
+        summary.failed += 1;
 
-        console.log(
-          "🔎 FOOTBALL SETTLEMENT DIAGNOSTIC",
-        );
+        summary.errors.push({
+          gamePk,
+          message:
+            "無法取得 MLB 比賽資料",
+        });
 
-        console.log(
-          `Game PK：${prediction.game_pk}`,
-        );
-
-        console.log(
-          `預測建立：${prediction.created_at}`,
-        );
-
-        console.log(
-          `實際開賽：${prediction.commence_time}`,
-        );
-
-        console.log(
-          `主隊：${prediction.home_team}`,
-        );
-
-        console.log(
-          `客隊：${prediction.away_team}`,
-        );
-
-        console.log(
-          `搜尋開始：${matchResult.diagnostics.searchStart}`,
-        );
-
-        console.log(
-          `搜尋結束：${matchResult.diagnostics.searchEnd}`,
-        );
-
-        console.log(
-          `日期範圍 finished：${matchResult.diagnostics.finishedRows} 場`,
-        );
-
-        console.log(
-          `主隊正規化：${matchResult.diagnostics.normalizedHome}`,
-        );
-
-        console.log(
-          `客隊正規化：${matchResult.diagnostics.normalizedAway}`,
-        );
-
-        console.log(
-          `主隊候選：${
-            matchResult.diagnostics.homeCandidates.length > 0
-              ? matchResult.diagnostics.homeCandidates.join("｜")
-              : "無"
-          }`,
-        );
-
-        console.log(
-          `客隊候選：${
-            matchResult.diagnostics.awayCandidates.length > 0
-              ? matchResult.diagnostics.awayCandidates.join("｜")
-              : "無"
-          }`,
-        );
-
-        console.log(
-          "======================================",
-        );
+        continue;
       }
 
-      summary.details.push({
-        id:
-          prediction.id,
+      /*
+       * 還沒結束，不動
+       */
+      if (
+        !isFinishedGame(
+          feed,
+        )
+      ) {
+        summary.skipped += 1;
+        continue;
+      }
 
-        gamePk:
-          prediction.game_pk,
+      summary.finished += 1;
 
-        homeTeam:
-          prediction.home_team,
+      const finalScore =
+        getFinalScore(
+          feed,
+        );
 
-        awayTeam:
-          prediction.away_team,
+      if (
+        !finalScore
+      ) {
+        summary.failed += 1;
 
-        prediction:
-          prediction.prediction,
+        summary.errors.push({
+          gamePk,
+          message:
+            "比賽已結束但無法取得最終比分",
+        });
 
-        message:
-          "尚未找到已完賽比分",
-      });
+        continue;
+      }
 
-      continue;
-    }
+      const result =
+        calculateResult({
+          prediction,
 
-    summary.matched +=
-      1;
+          homeRuns:
+            finalScore.homeRuns,
 
-    const settlement =
-      settlePrediction({
-        prediction:
-          prediction.prediction,
+          awayRuns:
+            finalScore.awayRuns,
+        });
 
-        homeTeam:
-          prediction.home_team,
+      if (
+        !result
+      ) {
+        summary.skipped += 1;
 
-        awayTeam:
-          prediction.away_team,
+        summary.errors.push({
+          gamePk,
+          message:
+            `無法判斷 prediction：${prediction.prediction}`,
+        });
 
-        homeScore:
-          match.home_score,
+        continue;
+      }
 
-        awayScore:
-          match.away_score,
-      });
-
-    if (
-      !settlement
-    ) {
-      summary.unsupported +=
-        1;
-
-      summary.details.push({
-        id:
-          prediction.id,
-
-        gamePk:
-          prediction.game_pk,
-
-        homeTeam:
-          prediction.home_team,
-
-        awayTeam:
-          prediction.away_team,
-
-        prediction:
-          prediction.prediction,
-
-        score:
-          `${match.away_score}-${match.home_score}`,
-
-        message:
-          "無法辨識推薦格式，未結算",
-      });
-
-      continue;
-    }
-
-    const {
-      error:
-        updateError,
-    } =
-      await supabase
+      /*
+       * ======================================
+       * 3. 更新 prediction_history
+       * ======================================
+       */
+      const {
+        error:
+          updateError,
+      } = await supabase
         .from(
           "prediction_history",
         )
         .update({
-          result:
-            settlement,
+          result,
         })
         .eq(
           "id",
           prediction.id,
+        )
+        .eq(
+          "result",
+          "pending",
         );
 
-    if (
-      updateError
-    ) {
-      throw new Error(
-        `更新足球結算失敗 ${prediction.id}：${updateError.message}`,
+      if (
+        updateError
+      ) {
+        throw updateError;
+      }
+
+      summary.settled += 1;
+
+      if (
+        result ===
+        "win"
+      ) {
+        summary.wins += 1;
+      } else {
+        summary.losses += 1;
+      }
+
+      console.log(
+        `✅ MLB ${gamePk} 自動結算：${prediction.prediction} → ${result}｜比分 ${finalScore.awayRuns}:${finalScore.homeRuns}`,
+      );
+    } catch (error) {
+      summary.failed += 1;
+
+      const message =
+        getErrorMessage(
+          error,
+        );
+
+      summary.errors.push({
+        gamePk,
+        message,
+      });
+
+      console.error(
+        `❌ MLB ${gamePk} 結算失敗：`,
+        error,
       );
     }
-
-    summary.settled +=
-      1;
-
-    if (
-      settlement ===
-      "win"
-    ) {
-      summary.wins +=
-        1;
-    } else if (
-      settlement ===
-      "loss"
-    ) {
-      summary.losses +=
-        1;
-    } else {
-      summary.pushes +=
-        1;
-    }
-
-    summary.details.push({
-      id:
-        prediction.id,
-
-      gamePk:
-        prediction.game_pk,
-
-      homeTeam:
-        prediction.home_team,
-
-      awayTeam:
-        prediction.away_team,
-
-      prediction:
-        prediction.prediction,
-
-      score:
-        `${match.away_score}-${match.home_score}`,
-
-      result:
-        settlement,
-
-      message:
-        `結算完成：${settlement}`,
-    });
-
-    console.log(
-      `⚽ FOOTBALL SETTLED：${prediction.away_team} ${match.away_score}-${match.home_score} ${prediction.home_team}｜${prediction.prediction}｜${settlement}`,
-    );
   }
-
-  console.log(
-    "======================================",
-  );
-
-  console.log(
-    "⚽ FOOTBALL SETTLEMENT COMPLETE",
-  );
-
-  console.log(
-    `Pending：${summary.pending}`,
-  );
-
-  console.log(
-    `Matched：${summary.matched}`,
-  );
-
-  console.log(
-    `Settled：${summary.settled}`,
-  );
-
-  console.log(
-    `Win：${summary.wins}`,
-  );
-
-  console.log(
-    `Loss：${summary.losses}`,
-  );
-
-  console.log(
-    `Push：${summary.pushes}`,
-  );
-
-  console.log(
-    `Not Found：${summary.notFound}`,
-  );
-
-  console.log(
-    `Unsupported：${summary.unsupported}`,
-  );
-
-  console.log(
-    `Future / Not Ready：${summary.futureGames}`,
-  );
-
-  console.log(
-    `Missing Schedule：${summary.missingSchedule}`,
-  );
-
-  console.log(
-    "======================================",
-  );
 
   return summary;
 }

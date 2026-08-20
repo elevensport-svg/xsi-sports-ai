@@ -1,10 +1,12 @@
 import Link from "next/link";
-
+import {
+  getMlbGameByPk,
+} from "@/lib/api/mlb";
 import { createAdminClient } from "../../lib/supabase/admin";
 
 import {
   getPredictionHistoryStats,
-  isValidMlbPrediction,
+  isValidPrediction,
 } from "@/lib/prediction/historyStats";
 
 export const dynamic = "force-dynamic";
@@ -259,17 +261,14 @@ export default async function HistoryPage() {
    * MLB + FOOTBALL
    * ==========================================
    */
-  const validHistories =
+  const allValidHistories =
   histories.filter(
-    (item) => {
-      if (
-        !isValidMlbPrediction(
-          item,
-        )
-      ) {
-        return false;
-      }
+    isValidPrediction,
+  );
 
+const validHistories =
+  allValidHistories.filter(
+    (item) => {
       const result =
         String(
           item.result ?? "",
@@ -277,10 +276,6 @@ export default async function HistoryPage() {
           .trim()
           .toLowerCase();
 
-      /*
-       * 歷史戰績只顯示已結算
-       * pending / 尚未結束的預測全部排除
-       */
       return (
         result === "win" ||
         result === "won" ||
@@ -459,7 +454,72 @@ export default async function HistoryPage() {
       );
     }
   }
+/*
+ * ==========================================
+ * MLB 日期補強
+ *
+ * mlb_match_history 尚未有資料時，
+ * 直接用 MLB 官方 Game PK 查實際比賽日期。
+ * ==========================================
+ */
 
+const missingMlbGamePks =
+  mlbGamePks.filter(
+    (gamePk) =>
+      !mlbDateMap.has(
+        gamePk,
+      ),
+  );
+
+if (
+  missingMlbGamePks.length >
+  0
+) {
+  const mlbGames =
+    await Promise.all(
+      missingMlbGamePks.map(
+        async (
+          gamePk,
+        ) => {
+          try {
+            const game =
+              await getMlbGameByPk(
+                gamePk,
+              );
+
+            return {
+              gamePk,
+              gameDate:
+                game?.gameDate ??
+                null,
+            };
+          } catch {
+            return {
+              gamePk,
+              gameDate:
+                null,
+            };
+          }
+        },
+      ),
+    );
+
+  for (
+    const game
+    of mlbGames
+  ) {
+    if (
+      !game.gameDate
+    ) {
+      continue;
+    }
+
+    mlbDateMap.set(
+      game.gamePk,
+      game.gameDate,
+    );
+  }
+}
   const footballDateMap =
     new Map<
       string,
@@ -593,20 +653,27 @@ export default async function HistoryPage() {
     getYesterdayKey();
 
   const yesterdayHistories =
-    validHistories.filter(
-      (item) =>
+  allValidHistories.filter(
+    (item) => {
+      const matchDate =
+        getHistoryMatchDate(
+          item,
+          mlbDateMap,
+          footballDateMap,
+          footballHistoryDateMap,
+        );
+
+      if (!matchDate) {
+        return false;
+      }
+
+      return (
         getTaiwanDateKey(
-          new Date(
-            getHistoryMatchDate(
-              item,
-              mlbDateMap,
-              footballDateMap,
-              footballHistoryDateMap,
-            ),
-          ),
-        ) ===
-        yesterdayKey,
-    );
+          new Date(matchDate),
+        ) === yesterdayKey
+      );
+    },
+  );
 
   const olderHistories =
     validHistories.filter(

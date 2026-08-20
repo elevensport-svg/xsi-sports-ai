@@ -4,7 +4,7 @@ import {
 
 import {
   settleMlbPredictions,
-} from "@/lib/prediction/settleMlbPredictions";
+} from "../../../../lib/prediction/settleMlbPredictions";
 
 export const dynamic =
   "force-dynamic";

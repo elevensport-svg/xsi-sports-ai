@@ -552,3 +552,214 @@ export async function getMlbGameByPk(
     return null;
   }
 }
+/*
+ * ==========================================
+ * MLB 正式完賽比分
+ *
+ * 給 prediction settlement 使用。
+ * 直接依 Game PK 查 MLB 官方 live feed，
+ * 只有比賽已正式結束才回傳比分。
+ * ==========================================
+ */
+export type MlbFinalScore = {
+  gamePk: number;
+  gameDate: string;
+  officialDate: string;
+
+  status: {
+    abstractGameState: string;
+    detailedState: string;
+  };
+
+  awayTeam: MlbTeamReference;
+  homeTeam: MlbTeamReference;
+
+  awayScore: number;
+  homeScore: number;
+};
+
+function isMlbFinalStatus(
+  abstractGameState: string,
+  detailedState: string,
+): boolean {
+  const abstractState =
+    abstractGameState
+      .trim()
+      .toLowerCase();
+
+  const detailed =
+    detailedState
+      .trim()
+      .toLowerCase();
+
+  if (
+    abstractState ===
+    "final"
+  ) {
+    return true;
+  }
+
+  return (
+    detailed === "final" ||
+    detailed === "game over" ||
+    detailed.includes(
+      "completed early",
+    )
+  );
+}
+
+export async function getMlbFinalScoreByGamePk(
+  gamePk:
+    | string
+    | number,
+): Promise<MlbFinalScore | null> {
+  const url =
+    `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+
+  try {
+    const response =
+      await fetch(
+        url,
+        {
+          cache: "no-store",
+        },
+      );
+
+    if (
+      !response.ok
+    ) {
+      console.error(
+        "MLB Final Score API 錯誤：",
+        response.status,
+      );
+
+      return null;
+    }
+
+    const raw =
+      await response.json();
+
+    const gameData =
+      raw?.gameData;
+
+    const linescore =
+      raw?.liveData?.linescore;
+
+    if (
+      !gameData?.game ||
+      !gameData?.teams ||
+      !linescore?.teams
+    ) {
+      return null;
+    }
+
+    const abstractGameState =
+      String(
+        gameData.status
+          ?.abstractGameState ??
+          "",
+      );
+
+    const detailedState =
+      String(
+        gameData.status
+          ?.detailedState ??
+          "",
+      );
+
+    if (
+      !isMlbFinalStatus(
+        abstractGameState,
+        detailedState,
+      )
+    ) {
+      return null;
+    }
+
+    const awayScore =
+      Number(
+        linescore.teams
+          ?.away?.runs,
+      );
+
+    const homeScore =
+      Number(
+        linescore.teams
+          ?.home?.runs,
+      );
+
+    if (
+      !Number.isFinite(
+        awayScore,
+      ) ||
+      !Number.isFinite(
+        homeScore,
+      )
+    ) {
+      return null;
+    }
+
+    const awayTeam =
+      gameData.teams.away;
+
+    const homeTeam =
+      gameData.teams.home;
+
+    return {
+      gamePk:
+        Number(
+          gameData.game.pk ??
+            gamePk,
+        ),
+
+      gameDate:
+        gameData.datetime
+          ?.dateTime ??
+        "",
+
+      officialDate:
+        gameData.datetime
+          ?.officialDate ??
+        "",
+
+      status: {
+        abstractGameState,
+        detailedState,
+      },
+
+      awayTeam: {
+        id:
+          Number(
+            awayTeam.id,
+          ),
+        name:
+          String(
+            awayTeam.name ??
+              "",
+          ),
+      },
+
+      homeTeam: {
+        id:
+          Number(
+            homeTeam.id,
+          ),
+        name:
+          String(
+            homeTeam.name ??
+              "",
+          ),
+      },
+
+      awayScore,
+      homeScore,
+    };
+  } catch (error) {
+    console.error(
+      "取得 MLB 正式完賽比分失敗：",
+      error,
+    );
+
+    return null;
+  }
+}
