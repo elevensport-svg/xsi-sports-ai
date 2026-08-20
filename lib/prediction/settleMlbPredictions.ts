@@ -496,9 +496,15 @@ export async function settleMlbPredictions(): Promise<MlbSettlementResult> {
           "prediction_history",
         )
         .update({
-          result:
-            settlement,
-        })
+  result:
+    settlement,
+
+  away_score:
+    finalScore.awayScore,
+
+  home_score:
+    finalScore.homeScore,
+})
         .eq(
           "id",
           prediction.id,

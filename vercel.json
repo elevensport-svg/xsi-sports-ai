@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/football-settlement",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/mlb-settlement",
+      "schedule": "0 8 * * *"
     }
   ]
 }
